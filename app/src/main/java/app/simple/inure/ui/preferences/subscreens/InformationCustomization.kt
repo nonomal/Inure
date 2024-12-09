@@ -16,7 +16,7 @@ import app.simple.inure.decorations.views.AppIconImageView
 import app.simple.inure.extensions.fragments.ScopedFragment
 import app.simple.inure.glide.util.ImageLoader.loadAppIcon
 import app.simple.inure.preferences.AppsPreferences
-import app.simple.inure.util.PackageListUtils.setAppInfo
+import app.simple.inure.util.InfoStripUtils.setAppInfo
 
 class InformationCustomization : ScopedFragment() {
 
@@ -71,7 +71,7 @@ class InformationCustomization : ScopedFragment() {
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         super.onSharedPreferenceChanged(sharedPreferences, key)
         when (key) {
-            AppsPreferences.infoCustomFilter -> {
+            AppsPreferences.INFO_CUSTOM_FILTER -> {
                 details.setAppInfo(packageInfo)
             }
         }
@@ -84,5 +84,7 @@ class InformationCustomization : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "InformationCustomization"
     }
 }

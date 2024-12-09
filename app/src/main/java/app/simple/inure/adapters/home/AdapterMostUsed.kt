@@ -6,15 +6,16 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
-import app.simple.inure.apk.parsers.FOSSParser
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
+import app.simple.inure.decorations.condensed.CondensedDynamicRippleConstraintLayout
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
-import app.simple.inure.decorations.ripple.DynamicRippleConstraintLayout
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.AppIconImageView
 import app.simple.inure.glide.modules.GlideApp
 import app.simple.inure.glide.util.ImageLoader.loadAppIcon
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
 import app.simple.inure.models.PackageStats
+import app.simple.inure.util.AdapterUtils.setAppVisualStates
 import app.simple.inure.util.RecyclerViewUtils
 import java.util.concurrent.TimeUnit.MILLISECONDS
 
@@ -43,45 +44,46 @@ class AdapterMostUsed : RecyclerView.Adapter<VerticalListViewHolder>() {
     override fun onBindViewHolder(holder: VerticalListViewHolder, position_: Int) {
         val position = position_ - 1
 
-        if (holder is Holder) {
-            holder.icon.transitionName = apps[position].packageInfo?.packageName
-            holder.icon.loadAppIcon(apps[position].packageInfo!!.packageName, apps[position].packageInfo!!.applicationInfo.enabled)
-            holder.name.text = apps[position].packageInfo?.applicationInfo!!.name
-            holder.packageId.text = apps[position].packageInfo?.packageName
+        when (holder) {
+            is Holder -> {
+                holder.icon.transitionName = apps[position].packageInfo?.packageName
+                holder.icon.loadAppIcon(apps[position].packageInfo!!.packageName, apps[position].packageInfo!!.safeApplicationInfo.enabled)
+                holder.name.text = apps[position].packageInfo?.applicationInfo!!.name
+                holder.packageId.text = apps[position].packageInfo?.packageName
+                holder.name.setAppVisualStates(apps[position].packageInfo!!)
 
-            holder.name.setStrikeThru(apps[position].packageInfo?.applicationInfo?.enabled ?: false)
-            holder.name.setFOSSIcon(FOSSParser.isPackageFOSS(apps[position].packageInfo?.packageName))
-
-            with(apps[position].totalTimeUsed) {
-                holder.date.apply {
-                    this.text = when {
-                        MILLISECONDS.toSeconds(this@with) < 60 -> {
-                            this.context.getString(R.string.used_for_seconds,
-                                                   MILLISECONDS.toSeconds(this@with).toString())
-                        }
-                        MILLISECONDS.toMinutes(this@with) < 60 -> {
-                            this.context.getString(R.string.used_for_short,
-                                                   MILLISECONDS.toMinutes(this@with).toString())
-                        }
-                        else -> {
-                            this.context.getString(R.string.used_for_long,
-                                                   MILLISECONDS.toHours(this@with).toString(),
-                                                   (MILLISECONDS.toMinutes(this@with) % 60).toString())
+                with(apps[position].totalTimeUsed) {
+                    holder.date.apply {
+                        this.text = when {
+                            MILLISECONDS.toSeconds(this@with) < 60 -> {
+                                this.context.getString(R.string.used_for_seconds,
+                                                       MILLISECONDS.toSeconds(this@with).toString())
+                            }
+                            MILLISECONDS.toMinutes(this@with) < 60 -> {
+                                this.context.getString(R.string.used_for_short,
+                                                       MILLISECONDS.toMinutes(this@with).toString())
+                            }
+                            else -> {
+                                this.context.getString(R.string.used_for_long,
+                                                       MILLISECONDS.toHours(this@with).toString(),
+                                                       (MILLISECONDS.toMinutes(this@with) % 60).toString())
+                            }
                         }
                     }
                 }
-            }
 
-            holder.container.setOnClickListener {
-                adapterCallbacks.onAppClicked(apps[position].packageInfo!!, holder.icon)
-            }
+                holder.container.setOnClickListener {
+                    adapterCallbacks.onAppClicked(apps[position].packageInfo!!, holder.icon)
+                }
 
-            holder.container.setOnLongClickListener {
-                adapterCallbacks.onAppLongPressed(apps[position].packageInfo!!, holder.icon)
-                true
+                holder.container.setOnLongClickListener {
+                    adapterCallbacks.onAppLongPressed(apps[position].packageInfo!!, holder.icon)
+                    true
+                }
             }
-        } else if (holder is Header) {
-            holder.total.text = String.format(holder.itemView.context.getString(R.string.total_apps), apps.size)
+            is Header -> {
+                holder.total.text = String.format(holder.itemView.context.getString(R.string.total_apps), apps.size)
+            }
         }
     }
 
@@ -93,7 +95,7 @@ class AdapterMostUsed : RecyclerView.Adapter<VerticalListViewHolder>() {
     }
 
     override fun getItemCount(): Int {
-        return apps.size
+        return apps.size.plus(1)
     }
 
     override fun getItemId(position: Int): Long {
@@ -115,7 +117,7 @@ class AdapterMostUsed : RecyclerView.Adapter<VerticalListViewHolder>() {
         val name: TypeFaceTextView = itemView.findViewById(R.id.adapter_recently_app_name)
         val packageId: TypeFaceTextView = itemView.findViewById(R.id.adapter_recently_app_package_id)
         val date: TypeFaceTextView = itemView.findViewById(R.id.adapter_recently_date)
-        val container: DynamicRippleConstraintLayout = itemView.findViewById(R.id.adapter_recently_container)
+        val container: CondensedDynamicRippleConstraintLayout = itemView.findViewById(R.id.adapter_recently_container)
     }
 
     inner class Header(itemView: View) : VerticalListViewHolder(itemView) {

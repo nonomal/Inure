@@ -1,5 +1,6 @@
 package app.simple.inure.util
 
+import android.annotation.SuppressLint
 import android.os.Build
 import app.simple.inure.preferences.FormattingPreferences
 import java.io.File
@@ -8,21 +9,29 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import java.text.CharacterIterator
 import java.text.StringCharacterIterator
-import java.util.*
+import java.util.LinkedList
 import kotlin.math.abs
 
 object FileSizeHelper {
 
-    fun String.toSize(): String {
-        return File(this).length().toSize()
+    fun String?.toSize(): String {
+        return try {
+            File(this!!).length().toSize()
+        } catch (e: NullPointerException) {
+            0L.toSize()
+        }
     }
 
     fun String.getDirectoryLength(): Long {
         return File(this).length()
     }
 
-    fun String.toLength(): Long {
-        return File(this).length()
+    fun String?.toLength(): Long {
+        return try {
+            File(this!!).length()
+        } catch (e: NullPointerException) {
+            0L
+        }
     }
 
     fun Array<String>.getDirectorySize(): Long {
@@ -81,11 +90,11 @@ object FileSizeHelper {
     }
 
     fun Int.toBytes(): Int {
-        return when {
-            FormattingPreferences.getSizeType() == "si" -> {
+        return when (FormattingPreferences.getSizeType()) {
+            "si" -> {
                 this * 1000
             }
-            FormattingPreferences.getSizeType() == "binary" -> {
+            "binary" -> {
                 this * 1024
             }
             else -> {
@@ -99,11 +108,11 @@ object FileSizeHelper {
     }
 
     fun Long.toSize(): String {
-        return when {
-            FormattingPreferences.getSizeType() == "si" -> {
+        return when (FormattingPreferences.getSizeType()) {
+            "si" -> {
                 this.humanReadableByteCountSI()
             }
-            FormattingPreferences.getSizeType() == "binary" -> {
+            "binary" -> {
                 this.humanReadableByteCountBinary()
             }
             else -> {
@@ -112,6 +121,7 @@ object FileSizeHelper {
         }
     }
 
+    @SuppressLint("DefaultLocale")
     private fun Long.humanReadableByteCountBinary(): String {
         val absB = if (this == Long.MIN_VALUE) Long.MAX_VALUE else abs(this)
         if (absB < 1024) {
@@ -129,6 +139,7 @@ object FileSizeHelper {
         return String.format("%.1f %ciB", value / 1024.0, ci.current())
     }
 
+    @SuppressLint("DefaultLocale")
     private fun Long.humanReadableByteCountSI(): String {
         var bytes = this
         if (-1000 < bytes && bytes < 1000) {

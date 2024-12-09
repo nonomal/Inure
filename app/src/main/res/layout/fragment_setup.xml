@@ -67,7 +67,7 @@
                     android:text="@string/desc_data_collect"
                     android:textSize="@dimen/preferences_description_text_size"
                     app:appFontStyle="regular"
-                    app:drawableStartCompat="@drawable/ic_warning_tiny"
+                    app:drawableStartCompat="@drawable/ic_warning_12dp"
                     app:drawableTintStyle="warning"
                     app:textColorStyle="tertiary" />
 
@@ -274,7 +274,7 @@
                         android:text="@string/use_root_methods"
                         android:textSize="@dimen/preferences_title_text_size"
                         app:appFontStyle="bold"
-                        app:drawableEndCompat="@drawable/ic_warning_tiny"
+                        app:drawableEndCompat="@drawable/ic_warning_12dp"
                         app:drawableTintStyle="warning"
                         app:layout_constraintBottom_toTopOf="@+id/typeFaceTextView15"
                         app:layout_constraintEnd_toStartOf="@+id/configuration_root_switch_view"
@@ -299,9 +299,9 @@
                         app:layout_constraintTop_toBottomOf="@id/typeFaceTextView07"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/configuration_root_switch_view"
-                        android:layout_width="@dimen/switch_width"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:clipChildren="false"
@@ -336,11 +336,12 @@
                         android:gravity="center_vertical"
                         android:text="@string/use_shizuku"
                         android:textSize="@dimen/preferences_title_text_size"
+                        android:layout_marginBottom="5dp"
                         app:appFontStyle="bold"
-                        app:drawableEndCompat="@drawable/ic_warning_tiny"
+                        app:drawableEndCompat="@drawable/ic_warning_12dp"
                         app:drawableTintStyle="warning"
-                        app:layout_constraintBottom_toTopOf="@+id/typeFaceTextView16"
-                        app:layout_constraintEnd_toStartOf="@+id/setup_shizuku_switch_view"
+                        app:layout_constraintBottom_toTopOf="@+id/shizuku_permission_state"
+                        app:layout_constraintEnd_toStartOf="@+id/shizuku_switch_view"
                         app:layout_constraintHorizontal_bias="0.0"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
@@ -350,21 +351,34 @@
                         android:id="@+id/typeFaceTextView16"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="5dp"
                         android:layout_marginEnd="15dp"
                         android:text="@string/shizuku_desc"
                         android:textSize="@dimen/preferences_description_text_size"
+                        android:layout_marginTop="5dp"
                         app:appFontStyle="regular"
                         app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toStartOf="@+id/setup_shizuku_switch_view"
+                        app:layout_constraintEnd_toStartOf="@+id/shizuku_switch_view"
                         app:layout_constraintHorizontal_bias="0.0"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/typeFaceTextView11"
+                        app:layout_constraintTop_toBottomOf="@+id/shizuku_permission_state"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
-                        android:id="@+id/setup_shizuku_switch_view"
-                        android:layout_width="@dimen/switch_width"
+                    <app.simple.inure.decorations.typeface.TypeFaceTextView
+                        android:id="@+id/shizuku_permission_state"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="15dp"
+                        android:textSize="@dimen/desc_text_size"
+                        app:appFontStyle="regular"
+                        app:layout_constraintBottom_toTopOf="@id/typeFaceTextView16"
+                        app:layout_constraintEnd_toStartOf="@+id/shizuku_switch_view"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@+id/typeFaceTextView11"
+                        app:textColorStyle="accent" />
+
+                    <app.simple.inure.decorations.toggles.Switch
+                        android:id="@+id/shizuku_switch_view"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:clipChildren="false"
@@ -394,18 +408,20 @@
         android:orientation="horizontal"
         android:padding="@dimen/popup_padding">
 
-        <app.simple.inure.decorations.checkbox.InureCheckBox
+        <app.simple.inure.decorations.toggles.CheckBox
             android:id="@+id/show_again_checkbox"
             android:layout_width="@dimen/checkbox_dimensions"
             android:layout_height="@dimen/checkbox_dimensions"
             android:layout_gravity="center_vertical"
             android:layout_marginStart="@dimen/popup_padding" />
 
-        <app.simple.inure.decorations.typeface.TypeFaceTextView
+        <app.simple.inure.decorations.ripple.DynamicRippleTextView
+            android:id="@+id/dont_show_again"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"
-            android:layout_marginStart="@dimen/popup_padding"
+            android:layout_marginHorizontal="@dimen/popup_padding"
+            android:padding="4dp"
             android:layout_weight="1"
             android:text="@string/dont_show_again"
             android:textSize="@dimen/desc_text_size"

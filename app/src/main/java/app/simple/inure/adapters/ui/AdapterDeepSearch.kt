@@ -5,22 +5,23 @@ import android.content.pm.PackageInfo
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
-import app.simple.inure.apk.parsers.FOSSParser
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
+import app.simple.inure.decorations.condensed.CondensedDynamicRippleConstraintLayout
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
 import app.simple.inure.decorations.ripple.DynamicRippleTextView
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.AppIconImageView
 import app.simple.inure.glide.modules.GlideApp
 import app.simple.inure.glide.util.ImageLoader.loadAppIcon
-import app.simple.inure.models.SearchModel
+import app.simple.inure.models.Search
 import app.simple.inure.preferences.SearchPreferences
 import app.simple.inure.util.AdapterUtils
-import app.simple.inure.util.PackageListUtils.setAppInfo
+import app.simple.inure.util.AdapterUtils.setAppVisualStates
+import app.simple.inure.util.InfoStripUtils.setAppInfo
 
-class AdapterDeepSearch(private var deepSearchInfo: ArrayList<SearchModel>, private var searchKeyword: String = "") : RecyclerView.Adapter<AdapterDeepSearch.Holder>() {
+class AdapterDeepSearch(private var deepSearchInfo: ArrayList<Search>, private var searchKeyword: String = "") : RecyclerView.Adapter<AdapterDeepSearch.Holder>() {
 
     private lateinit var adapterDeepSearchCallbacks: AdapterDeepSearchCallbacks
     var ignoreCasing = SearchPreferences.isCasingIgnored()
@@ -33,12 +34,11 @@ class AdapterDeepSearch(private var deepSearchInfo: ArrayList<SearchModel>, priv
     @SuppressLint("ClickableViewAccessibility")
     override fun onBindViewHolder(holder: Holder, position: Int) {
         holder.icon.transitionName = deepSearchInfo[position].packageInfo.packageName
-        holder.icon.loadAppIcon(deepSearchInfo[position].packageInfo.packageName, deepSearchInfo[position].packageInfo.applicationInfo.enabled)
-        holder.name.text = deepSearchInfo[position].packageInfo.applicationInfo.name
+        holder.icon.loadAppIcon(deepSearchInfo[position].packageInfo.packageName, deepSearchInfo[position].packageInfo.safeApplicationInfo.enabled)
+        holder.name.text = deepSearchInfo[position].packageInfo.safeApplicationInfo.name
         holder.packageId.text = deepSearchInfo[position].packageInfo.packageName
 
-        holder.name.setStrikeThru(deepSearchInfo[position].packageInfo.applicationInfo.enabled)
-        holder.name.setFOSSIcon(FOSSParser.isPackageFOSS(deepSearchInfo[position].packageInfo.packageName))
+        holder.name.setAppVisualStates(deepSearchInfo[position].packageInfo)
         holder.info.setAppInfo(deepSearchInfo[position].packageInfo)
         holder.setDeepInfo(deepSearchInfo[position])
 
@@ -91,13 +91,13 @@ class AdapterDeepSearch(private var deepSearchInfo: ArrayList<SearchModel>, priv
     }
 
     @SuppressLint("SetTextI18n")
-    private fun Holder.setDeepInfo(searchModel: SearchModel) {
-        permissions.text = "${searchModel.permissions} ${context.getString(R.string.permissions)}"
-        activities.text = "${searchModel.activities} ${context.getString(R.string.activities)}"
-        services.text = "${searchModel.services} ${context.getString(R.string.services)}"
-        receivers.text = "${searchModel.receivers} ${context.getString(R.string.receivers)}"
-        providers.text = "${searchModel.providers} ${context.getString(R.string.providers)}"
-        resources.text = "${searchModel.resources} ${context.getString(R.string.resources)}"
+    private fun Holder.setDeepInfo(search: Search) {
+        permissions.text = "${search.permissions} ${context.getString(R.string.permissions)}"
+        activities.text = "${search.activities} ${context.getString(R.string.activities)}"
+        services.text = "${search.services} ${context.getString(R.string.services)}"
+        receivers.text = "${search.receivers} ${context.getString(R.string.receivers)}"
+        providers.text = "${search.providers} ${context.getString(R.string.providers)}"
+        resources.text = "${search.resources} ${context.getString(R.string.resources)}"
     }
 
     fun setOnItemClickListener(adapterCallbacks: AdapterDeepSearchCallbacks) {
@@ -115,7 +115,7 @@ class AdapterDeepSearch(private var deepSearchInfo: ArrayList<SearchModel>, priv
         val receivers: DynamicRippleTextView = itemView.findViewById(R.id.receivers)
         val providers: DynamicRippleTextView = itemView.findViewById(R.id.providers)
         val resources: DynamicRippleTextView = itemView.findViewById(R.id.resources)
-        val container: ConstraintLayout = itemView.findViewById(R.id.container)
+        val container: CondensedDynamicRippleConstraintLayout = itemView.findViewById(R.id.container)
     }
 
     companion object {

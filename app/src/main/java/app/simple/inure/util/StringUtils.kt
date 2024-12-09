@@ -10,9 +10,13 @@ import app.simple.inure.preferences.AppearancePreferences
 import app.simple.inure.themes.manager.ThemeManager
 import java.io.InputStream
 import java.nio.charset.Charset
-import java.util.*
+import java.util.Locale
 
 object StringUtils {
+
+    fun emptyString(): String {
+        return ""
+    }
 
     /**
      * Capitalized the first letter of any [String]
@@ -60,6 +64,10 @@ object StringUtils {
         }
     }
 
+    fun CharSequence.optimizeToColoredString(lookupIndex: String): Spannable {
+        return this.toString().optimizeToColoredString(lookupIndex)
+    }
+
     /**
      * Change string color to app's accent color.
      *
@@ -100,19 +108,24 @@ object StringUtils {
      *
      * @return [Spannable]
      */
-    fun Spannable.highlightExtensions(): Spannable {
-        kotlin.runCatching {
-            val spannable: Spannable = SpannableString(this)
-            spannable.setSpan(ForegroundColorSpan(getExtensionHardcodedColors(this.toString())),
-                              this.lastIndexOf("."),
-                              this.length,
-                              Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            return spannable
-        }.getOrElse {
+    fun String.highlightExtensions(isHighlighted: Boolean): Spannable {
+        if (isHighlighted) {
+            kotlin.runCatching {
+                val spannable: Spannable = SpannableString(this)
+                spannable.setSpan(ForegroundColorSpan(AppearancePreferences.getAccentColor()),
+                                  this.lastIndexOf("."),
+                                  this.length,
+                                  Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                return spannable
+            }.getOrElse {
+                return this.toSpannable()
+            }
+        } else {
             return this.toSpannable()
         }
     }
 
+    @Deprecated("This require hardcoding for every extension, use app accent color instead.")
     private fun getExtensionHardcodedColors(path: String): Int {
         kotlin.runCatching {
             return Color.parseColor(Extensions.imageExtensionColors[path.substring(path.lastIndexOf(".") + 1)])
@@ -161,5 +174,39 @@ object StringUtils {
             }
         }
         return false
+    }
+
+    fun StringBuilder.appendLineSafely(string: String) {
+        if (isNotEmpty()) {
+            append("\n$string")
+        } else {
+            append(string)
+        }
+    }
+
+    fun StringBuilder.appendFlag(string: String?) {
+        if (isNullOrEmpty()) {
+            append(string)
+        } else {
+            append(" | $string")
+        }
+    }
+
+    fun String.fetchLinks(): List<String> {
+        val links = mutableListOf<String>()
+        val regex = Regex("""\b(?:https?|ftp)://\S+\b""")
+        val matcher = regex.findAll(this)
+
+        for (match in matcher) {
+            links.add(match.value)
+        }
+
+        return links
+    }
+
+    fun String.emptyToString(string: String): String {
+        return this.ifEmpty {
+            string
+        }
     }
 }

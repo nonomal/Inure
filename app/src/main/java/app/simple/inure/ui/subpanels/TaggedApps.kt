@@ -11,13 +11,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
-import app.simple.inure.adapters.analytics.AnalyticsDataAdapter
+import app.simple.inure.adapters.tags.AdapterTaggedApps
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.decorations.ripple.DynamicRippleImageButton
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.CustomProgressBar
-import app.simple.inure.dialogs.menus.AppsMenu
+import app.simple.inure.dialogs.app.AppMenu
 import app.simple.inure.extensions.fragments.ScopedFragment
 import app.simple.inure.factories.subpanels.TaggedAppsViewModelFactory
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
@@ -29,6 +29,7 @@ class TaggedApps : ScopedFragment() {
 
     private lateinit var back: DynamicRippleImageButton
     private lateinit var title: TypeFaceTextView
+    private lateinit var count: TypeFaceTextView
     private lateinit var loader: CustomProgressBar
     private lateinit var recyclerView: CustomVerticalRecyclerView
 
@@ -44,6 +45,7 @@ class TaggedApps : ScopedFragment() {
 
         back = view.findViewById(R.id.back_button)
         title = view.findViewById(R.id.tag)
+        count = view.findViewById(R.id.count)
         loader = view.findViewById(R.id.loader)
         recyclerView = view.findViewById(R.id.recycler_view)
 
@@ -66,21 +68,24 @@ class TaggedApps : ScopedFragment() {
         }
 
         tagsListViewModel.getTaggedApps().observe(viewLifecycleOwner) {
+            count.text = getString(R.string.total_apps, it.size)
             loader.gone(animate = true)
-            val taggedAppsAdapter = AnalyticsDataAdapter(it)
 
-            taggedAppsAdapter.setOnAdapterCallbacks(object : AdapterCallbacks {
-                override fun onAppClicked(packageInfo: PackageInfo, icon: ImageView) {
-                    openAppInfo(packageInfo, icon)
-                }
+            with(AdapterTaggedApps(it)) {
+                recyclerView.adapter = this
+                setOnAdapterCallbacks(object : AdapterCallbacks {
 
-                override fun onAppLongPressed(packageInfo: PackageInfo, icon: ImageView) {
-                    AppsMenu.newInstance(packageInfo)
-                        .show(childFragmentManager, "apps_menu")
-                }
-            })
+                    override fun onAppClicked(packageInfo: PackageInfo, icon: ImageView) {
+                        openAppInfo(packageInfo, icon)
+                    }
 
-            recyclerView.adapter = taggedAppsAdapter
+                    override fun onAppLongPressed(packageInfo: PackageInfo, icon: ImageView) {
+                        AppMenu.newInstance(packageInfo)
+                            .show(childFragmentManager, AppMenu.TAG)
+                    }
+                })
+            }
+
             ItemTouchHelper(simpleItemTouchCallback).attachToRecyclerView(recyclerView)
 
             (view.parent as? ViewGroup)?.doOnPreDraw {
@@ -103,8 +108,8 @@ class TaggedApps : ScopedFragment() {
         override fun onSwiped(viewHolder: RecyclerView.ViewHolder, swipeDir: Int) {
             // Remove swiped item from list and notify the RecyclerView
             val position = viewHolder.bindingAdapterPosition
-            val packageName = (recyclerView.adapter as AnalyticsDataAdapter).getPackageInfo(position).packageName
-            (recyclerView.adapter as AnalyticsDataAdapter).removeItem(position)
+            val packageName = (recyclerView.adapter as AdapterTaggedApps).getPackageInfo(position).packageName
+            (recyclerView.adapter as AdapterTaggedApps).removeItem(position)
 
             tagsListViewModel.deleteTaggedApp(requireArguments().getString(BundleConstants.tag)!!, packageName) {
                 tagsViewModel.refresh()
@@ -120,5 +125,7 @@ class TaggedApps : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "tagged_apps"
     }
 }

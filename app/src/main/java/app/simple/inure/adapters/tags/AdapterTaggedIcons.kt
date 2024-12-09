@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
 import app.simple.inure.decorations.overscroll.HorizontalListViewHolder
 import app.simple.inure.glide.util.ImageLoader.loadAppIcon
+import com.bumptech.glide.Glide
 
 class AdapterTaggedIcons(private val packageNames: List<String>)
     : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -31,15 +32,30 @@ class AdapterTaggedIcons(private val packageNames: List<String>)
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        if (holder is Holder) {
-            holder.icon.loadAppIcon(packageNames[position], true)
-        } else if (holder is HolderLinear) {
-            holder.icon.loadAppIcon(packageNames[position], true)
+        when (holder) {
+            is Holder -> {
+                holder.icon.loadAppIcon(packageNames[position], true)
+            }
+            is HolderLinear -> {
+                holder.icon.loadAppIcon(packageNames[position], true)
+            }
         }
     }
 
     override fun getItemCount(): Int {
-        return packageNames.size
+        return packageNames.size.coerceAtMost(MAX_ICONS)
+    }
+
+    override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+        super.onViewRecycled(holder)
+        when (holder) {
+            is Holder -> {
+                Glide.with(holder.icon.context).clear(holder.icon)
+            }
+            is HolderLinear -> {
+                Glide.with(holder.icon.context).clear(holder.icon)
+            }
+        }
     }
 
     inner class Holder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -48,5 +64,9 @@ class AdapterTaggedIcons(private val packageNames: List<String>)
 
     inner class HolderLinear(itemView: View) : HorizontalListViewHolder(itemView) {
         val icon: ImageView = itemView.findViewById(R.id.icon)
+    }
+
+    companion object {
+        private const val MAX_ICONS = 40
     }
 }

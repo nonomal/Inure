@@ -11,8 +11,9 @@ import androidx.lifecycle.lifecycleScope
 import app.simple.inure.R
 import app.simple.inure.apk.utils.PackageData.getInstallerDir
 import app.simple.inure.apk.utils.PackageUtils
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.activities.BaseActivity
-import app.simple.inure.ui.viewers.XMLViewerTextView
+import app.simple.inure.ui.viewers.XML
 import app.simple.inure.util.FileUtils
 import app.simple.inure.util.NullSafety.isNull
 import app.simple.inure.util.ParcelUtils.parcelable
@@ -51,45 +52,41 @@ class ManifestAssociationActivity : BaseActivity() {
                                 packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                     packageManager.getPackageArchiveInfo(sourceFile.absolutePath, PackageManager.PackageInfoFlags.of(PackageUtils.flags))!!
                                 } else {
-                                    @Suppress("DEPRECATION")
                                     packageManager.getPackageArchiveInfo(sourceFile.absolutePath, PackageUtils.flags.toInt())!!
                                 }
 
-                                packageInfo.applicationInfo.sourceDir = sourceFile.absolutePath
+                                packageInfo.safeApplicationInfo.sourceDir = sourceFile.absolutePath
                             }.getOrElse {
                                 packageInfo = PackageInfo() // empty package info
-                                packageInfo.applicationInfo = ApplicationInfo() // empty application info
-                                packageInfo.applicationInfo.sourceDir = sourceFile.absolutePath
+                                packageInfo.safeApplicationInfo = ApplicationInfo() // empty application info
+                                packageInfo.safeApplicationInfo.sourceDir = sourceFile.absolutePath
                             }
                         } else {
                             packageInfo = PackageInfo() // empty package info
-                            packageInfo.applicationInfo = ApplicationInfo() // empty application info
-                            packageInfo.applicationInfo.sourceDir = sourceFile.absolutePath
+                            packageInfo.safeApplicationInfo = ApplicationInfo() // empty application info
+                            packageInfo.safeApplicationInfo.sourceDir = sourceFile.absolutePath
 
-                            if (packageInfo.applicationInfo.sourceDir.endsWith(".apkm")
-                                || packageInfo.applicationInfo.sourceDir.endsWith(".apks")
-                                || packageInfo.applicationInfo.sourceDir.endsWith(".zip")) {
+                            if (packageInfo.safeApplicationInfo.sourceDir.endsWith(".apkm")
+                                || packageInfo.safeApplicationInfo.sourceDir.endsWith(".apks")
+                                || packageInfo.safeApplicationInfo.sourceDir.endsWith(".zip")) {
 
-                                val zipFile = ZipFile(packageInfo.applicationInfo.sourceDir)
+                                val zipFile = ZipFile(packageInfo.safeApplicationInfo.sourceDir)
                                 val file = applicationContext.getInstallerDir("temp")
 
                                 file.delete()
                                 zipFile.extractFile("base.apk", file.absolutePath)
 
-                                packageInfo.applicationInfo.sourceDir = file.absolutePath + "/base.apk"
+                                packageInfo.safeApplicationInfo.sourceDir = file.absolutePath + "/base.apk"
                             }
                         }
 
                         withContext(Dispatchers.Main) {
                             hideLoader()
+                            val xml = XML.newInstance(packageInfo, true, "AndroidManifest.xml", false)
 
                             supportFragmentManager.beginTransaction()
                                 .setReorderingAllowed(true)
-                                .replace(R.id.app_container, XMLViewerTextView
-                                    .newInstance(packageInfo,
-                                                 true,
-                                                 sourceFile.absolutePath + "/AndroidManifest.xml",
-                                                 false), "app_info")
+                                .replace(R.id.app_container, xml, XML.TAG)
                                 .commit()
                         }
                     }.getOrElse {

@@ -4,27 +4,23 @@ import android.app.Application
 import android.content.pm.PackageInfo
 import android.text.Html
 import android.text.Spanned
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import app.simple.inure.apk.parsers.APKParser.extractManifest
-import app.simple.inure.apk.parsers.ApkManifestFetcher
-import app.simple.inure.apk.xml.XML
+import app.simple.inure.apk.decoders.XMLDecoder
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.WrappedViewModel
 import app.simple.inure.util.FileUtils.toFile
 import app.simple.inure.util.StringUtils.readTextSafely
 import app.simple.inure.util.XMLUtils.formatXML
 import app.simple.inure.util.XMLUtils.getPrettyXML
-import com.jaredrummler.apkparser.ApkParser
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import net.dongliu.apk.parser.ApkFile
 import java.io.File
 import java.io.FileInputStream
 
 class XMLViewerViewModel(val packageInfo: PackageInfo,
-                         private val isManifest: Boolean,
                          private val pathToXml: String,
                          private val raw: Boolean,
                          application: Application)
@@ -59,32 +55,8 @@ class XMLViewerViewModel(val packageInfo: PackageInfo,
                         it.readTextSafely()
                     }
                 } else {
-                    if (isManifest) {
-                        kotlin.runCatching {
-                            packageInfo.applicationInfo.extractManifest()!!
-                        }.getOrElse {
-                            /**
-                             * Alternate engine for parsing manifest
-                             */
-                            ApkManifestFetcher.getManifestXmlFromFilePath(packageInfo.applicationInfo.sourceDir)!!
-                        }
-                    } else {
-                        kotlin.runCatching {
-                            kotlin.runCatching {
-                                ApkParser.create(packageInfo.applicationInfo.sourceDir.toFile()).use {
-                                    it.transBinaryXml(pathToXml)
-                                }
-                            }.getOrElse {
-                                ApkFile(packageInfo.applicationInfo.sourceDir.toFile()).use {
-                                    it.transBinaryXml(pathToXml)
-                                }
-                            }
-                        }.getOrElse {
-                            XML(packageInfo.applicationInfo.sourceDir).use {
-                                it.transBinaryXml(pathToXml)
-                            }
-                        }
-                    }
+                    Log.d("XMLViewerViewModel", "getSpannedXml: $pathToXml")
+                    XMLDecoder(packageInfo.safeApplicationInfo.sourceDir.toFile()).decode(pathToXml)
                 }
 
                 spanned.postValue(code.formatXML().getPrettyXML())
@@ -96,16 +68,8 @@ class XMLViewerViewModel(val packageInfo: PackageInfo,
 
     private fun getStringXml() {
         viewModelScope.launch(Dispatchers.IO) {
-            delay(500) // Lets the animations finish first
-
             kotlin.runCatching {
-                val code = if (isManifest) {
-                    packageInfo.applicationInfo.extractManifest()!!
-                } else {
-                    XML(packageInfo.applicationInfo.sourceDir).use {
-                        it.transBinaryXml(pathToXml)
-                    }
-                }
+                val code = XMLDecoder(packageInfo.safeApplicationInfo.sourceDir.toFile()).decode(pathToXml)
 
                 val data = String.format(
                         "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3" +

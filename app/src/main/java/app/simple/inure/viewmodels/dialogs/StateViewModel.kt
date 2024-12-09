@@ -5,9 +5,11 @@ import android.content.pm.PackageInfo
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.Warnings
 import app.simple.inure.exceptions.InureShellException
 import app.simple.inure.extensions.viewmodels.RootShizukuViewModel
+import app.simple.inure.helpers.ShizukuServiceHelper
 import app.simple.inure.shizuku.ShizukuUtils
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
@@ -69,22 +71,8 @@ class StateViewModel(application: Application, private val packageInfo: PackageI
         }
     }
 
-    private fun useShizuku() {
-        viewModelScope.launch(Dispatchers.IO) {
-            kotlin.runCatching {
-                ShizukuUtils.setAppDisabled(packageInfo.applicationInfo.enabled, setOf(packageInfo.packageName))
-            }.onFailure {
-                success.postValue("Failed")
-            }.onSuccess {
-                success.postValue("Done")
-            }.getOrElse {
-                success.postValue("Failed")
-            }
-        }
-    }
-
     private fun formStateCommand(): String {
-        return if (packageInfo.applicationInfo.enabled) {
+        return if (packageInfo.safeApplicationInfo.enabled) {
             "pm disable ${packageInfo.packageName}"
         } else {
             "pm enable ${packageInfo.packageName}"
@@ -100,7 +88,17 @@ class StateViewModel(application: Application, private val packageInfo: PackageI
         success.postValue("Failed")
     }
 
-    override fun onShizukuCreated() {
-        useShizuku()
+    override fun onShizukuCreated(shizukuServiceHelper: ShizukuServiceHelper) {
+        viewModelScope.launch(Dispatchers.IO) {
+            kotlin.runCatching {
+                ShizukuUtils.setAppDisabled(packageInfo.safeApplicationInfo.enabled, setOf(packageInfo.packageName))
+            }.onFailure {
+                success.postValue("Failed")
+            }.onSuccess {
+                success.postValue("Done")
+            }.getOrElse {
+                success.postValue("Failed")
+            }
+        }
     }
 }

@@ -14,28 +14,15 @@ import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
 import app.simple.inure.extensions.viewmodels.RootServiceViewModel
 import app.simple.inure.models.Tracker
 import app.simple.inure.preferences.ConfigurationPreferences
-import app.simple.inure.util.ActivityUtils
-import app.simple.inure.util.ConditionUtils.invert
 import app.simple.inure.util.ConditionUtils.isZero
-import com.topjohnwu.superuser.nio.ExtendedFile
+import app.simple.inure.util.TrackerUtils
+import app.simple.inure.util.TrackerUtils.getActivityTrackers
+import app.simple.inure.util.TrackerUtils.getReceiverTrackers
+import app.simple.inure.util.TrackerUtils.getServiceTrackers
 import com.topjohnwu.superuser.nio.FileSystemManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
-import org.w3c.dom.NodeList
-import org.xml.sax.InputSource
 import java.io.File
-import java.io.StringReader
-import java.nio.ByteBuffer
-import java.nio.charset.Charset
-import javax.xml.parsers.DocumentBuilder
-import javax.xml.parsers.DocumentBuilderFactory
-import javax.xml.transform.Transformer
-import javax.xml.transform.TransformerFactory
-import javax.xml.transform.dom.DOMSource
-import javax.xml.transform.stream.StreamResult
 
 class InstallerTrackersViewModel(application: Application, private val apkFile: File) : RootServiceViewModel(application) {
 
@@ -75,7 +62,7 @@ class InstallerTrackersViewModel(application: Application, private val apkFile: 
                 packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     applicationContext().packageManager.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.PackageInfoFlags.of(flags.toLong()))!!
                 } else {
-                    @Suppress("DEPRECATION")
+                    @Suppress("DEPRECATION", "KotlinRedundantDiagnosticSuppress")
                     applicationContext().packageManager.getPackageArchiveInfo(apkFile.absolutePath, flags)!!
                 }
 
@@ -85,19 +72,20 @@ class InstallerTrackersViewModel(application: Application, private val apkFile: 
                 }
 
                 if (packageManager.isPackageInstalled(packageInfo?.packageName!!)) {
-                    packageInfo = packageManager.getPackageInfo(packageInfo?.packageName!!)
+                    packageInfo = packageManager.getPackageInfo(packageInfo?.packageName!!)!!
                 }
 
                 path = "/data/system/ifw/" + "${packageInfo?.packageName}.xml"
 
+                val trackersData = TrackerUtils.getTrackersData()
                 val trackersList = arrayListOf<Tracker>()
 
-                trackersList.addAll(getActivityTrackers())
-                trackersList.addAll(getServicesTrackers())
-                trackersList.addAll(getReceiversTrackers())
+                trackersList.addAll(packageInfo?.getActivityTrackers(applicationContext(), trackersData)!!)
+                trackersList.addAll(packageInfo?.getServiceTrackers(applicationContext(), trackersData)!!)
+                trackersList.addAll(packageInfo?.getReceiverTrackers(applicationContext(), trackersData)!!)
 
                 trackersList.sortBy {
-                    it.name
+                    it.componentName
                 }
 
                 if (trackersList.size.isZero()) {
@@ -105,7 +93,7 @@ class InstallerTrackersViewModel(application: Application, private val apkFile: 
                 }
 
                 if (ConfigurationPreferences.isUsingRoot()) {
-                    readIntentFirewallXml(getFileSystemManager()!!, trackersList)
+                    TrackerUtils.readIntentFirewallXml(getFileSystemManager()!!, trackersList, path)
                 }
 
                 trackers.postValue(trackersList)
@@ -115,215 +103,12 @@ class InstallerTrackersViewModel(application: Application, private val apkFile: 
         }
     }
 
-    private fun getActivityTrackers(): ArrayList<Tracker> {
-        val trackerSignatures = getTrackerSignatures()
-        val activities = packageInfo?.activities
-        val trackersList = arrayListOf<Tracker>()
-
-        if (activities != null) {
-            for (activity in activities) {
-                for (signature in trackerSignatures) {
-                    if (activity.name.contains(signature)) {
-                        val tracker = Tracker()
-
-                        tracker.activityInfo = activity
-                        tracker.name = activity.name
-
-                        kotlin.runCatching {
-                            tracker.isEnabled = ActivityUtils.isEnabled(applicationContext(), packageInfo?.packageName!!, activity.name)
-                        }
-
-                        tracker.trackerId = signature
-                        tracker.isReceiver = false
-                        tracker.isService = false
-                        tracker.isActivity = true
-
-                        trackersList.add(tracker)
-
-                        break
-                    }
-                }
-            }
-        }
-
-        return trackersList
-    }
-
-    private fun getServicesTrackers(): ArrayList<Tracker> {
-        val trackerSignatures = getTrackerSignatures()
-        val services = packageInfo?.services
-        val trackersList = arrayListOf<Tracker>()
-
-        if (services != null) {
-            for (service in services) {
-                for (signature in trackerSignatures) {
-                    if (service.name.contains(signature)) {
-                        val tracker = Tracker()
-
-                        tracker.serviceInfo = service
-                        tracker.name = service.name
-
-                        kotlin.runCatching {
-                            tracker.isEnabled = ActivityUtils.isEnabled(applicationContext(), packageInfo?.packageName!!, service.name)
-                        }
-
-                        tracker.trackerId = signature
-                        tracker.isReceiver = false
-                        tracker.isService = true
-                        tracker.isActivity = false
-
-                        trackersList.add(tracker)
-
-                        break
-                    }
-                }
-            }
-        }
-
-        return trackersList
-    }
-
-    private fun getReceiversTrackers(): ArrayList<Tracker> {
-        val trackerSignatures = getTrackerSignatures()
-        val receivers = packageInfo?.receivers
-        val trackersList = arrayListOf<Tracker>()
-
-        if (receivers != null) {
-            for (receiver in receivers) {
-                for (signature in trackerSignatures) {
-                    if (receiver.name.contains(signature)) {
-                        val tracker = Tracker()
-
-                        tracker.activityInfo = receiver
-                        tracker.name = receiver.name
-
-                        kotlin.runCatching {
-                            tracker.isEnabled = ActivityUtils.isEnabled(applicationContext(), packageInfo?.packageName!!, receiver.name)
-                        }
-
-                        tracker.trackerId = signature
-                        tracker.isReceiver = true
-                        tracker.isService = false
-                        tracker.isActivity = false
-
-                        trackersList.add(tracker)
-
-                        break
-                    }
-                }
-            }
-        }
-
-        return trackersList
-    }
-
-    private fun getTrackerSignatures(): List<String> {
-        return applicationContext().resources.getStringArray(R.array.trackers).filter { it.isNullOrEmpty().invert() }
-    }
-
     override fun runRootProcess(fileSystemManager: FileSystemManager?) {
         scanTrackers()
     }
 
-    fun clear() {
+    fun clearTrackersList() {
         tracker.value = null
-    }
-
-    /**
-     * <rules>
-     *      <activity block="true" log="false">
-     *          <component-filter name="package_name/component_name" />
-     *      </activity>
-     *      <service block="true" log="false">
-     *          <component-filter name="package_name/component_name" />
-     *      </service>
-     * </rules>
-     *
-     * Parse the file following the above structure
-     */
-    private fun readIntentFirewallXml(fileSystemManager: FileSystemManager, trackersList: ArrayList<Tracker>) {
-        with(fileSystemManager.getFile(path)) {
-            if (this.exists().invert()) {
-                this.newOutputStream().use {
-                    it.write("<rules>\n</rules>".toByteArray())
-                }
-            }
-        }
-
-        val channel = fileSystemManager.openChannel(path, FileSystemManager.MODE_READ_WRITE)
-        val capacity = channel.size().toInt()
-        val buffer = ByteBuffer.allocate(capacity)
-        channel.read(buffer)
-        buffer.flip()
-
-        val xml = String(buffer.array(), Charset.defaultCharset())
-        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(InputSource(StringReader(xml)))
-
-        val activityNodes = document.getElementsByTagName("activity")
-        val serviceNodes = document.getElementsByTagName("service")
-        val broadcastNodes = document.getElementsByTagName("broadcast")
-
-        for (i in 0 until activityNodes.length) {
-            val activityNode: Node = activityNodes.item(i)
-            if (activityNode.nodeType == Node.ELEMENT_NODE) {
-                val activityElement = activityNode as Element
-                val isBlocked = activityElement.getAttribute("block").toBoolean()
-                val componentFilters: NodeList = activityElement.getElementsByTagName("component-filter")
-                for (j in 0 until componentFilters.length) {
-                    val componentFilterNode: Node = componentFilters.item(j)
-                    if (componentFilterNode.nodeType == Node.ELEMENT_NODE) {
-                        val componentFilterElement = componentFilterNode as Element
-                        val componentName = componentFilterElement.getAttribute("name")
-
-                        trackersList.find { it.name == componentName.split("/")[1] }?.let {
-                            it.isBlocked = isBlocked
-                        }
-                    }
-                }
-            }
-        }
-
-        for (i in 0 until serviceNodes.length) {
-            val serviceNode: Node = serviceNodes.item(i)
-            if (serviceNode.nodeType == Node.ELEMENT_NODE) {
-                val serviceElement = serviceNode as Element
-                val isBlocked = serviceElement.getAttribute("block").toBoolean()
-                val componentFilters: NodeList = serviceElement.getElementsByTagName("component-filter")
-                for (j in 0 until componentFilters.length) {
-                    val componentFilterNode: Node = componentFilters.item(j)
-                    if (componentFilterNode.nodeType == Node.ELEMENT_NODE) {
-                        val componentFilterElement = componentFilterNode as Element
-                        val componentName = componentFilterElement.getAttribute("name")
-
-                        trackersList.find { it.name == componentName.split("/")[1] }?.let {
-                            it.isBlocked = isBlocked
-                        }
-                    }
-                }
-            }
-        }
-
-        for (i in 0 until broadcastNodes.length) {
-            val broadcastNode: Node = broadcastNodes.item(i)
-            if (broadcastNode.nodeType == Node.ELEMENT_NODE) {
-                val broadcastElement = broadcastNode as Element
-                val isBlocked = broadcastElement.getAttribute("block").toBoolean()
-                val componentFilters: NodeList = broadcastElement.getElementsByTagName("component-filter")
-                for (j in 0 until componentFilters.length) {
-                    val componentFilterNode: Node = componentFilters.item(j)
-                    if (componentFilterNode.nodeType == Node.ELEMENT_NODE) {
-                        val componentFilterElement = componentFilterNode as Element
-                        val componentName = componentFilterElement.getAttribute("name")
-
-                        trackersList.find { it.name == componentName.split("/")[1] }?.let {
-                            it.isBlocked = isBlocked
-                        }
-                    }
-                }
-            }
-        }
-
-        channel.close()
     }
 
     /**
@@ -351,151 +136,7 @@ class InstallerTrackersViewModel(application: Application, private val apkFile: 
     fun blockTrackers(trackers: ArrayList<Tracker>, position: Int = -1) {
         viewModelScope.launch(Dispatchers.IO) {
             kotlin.runCatching {
-                val file: ExtendedFile = getFileSystemManager()!!.getFile(path)
-
-                if (!file.exists()) {
-                    file.newOutputStream().use {
-                        it.write("<rules>\n</rules>".toByteArray())
-                    }
-                }
-
-                val channel = getFileSystemManager()!!.openChannel(path, FileSystemManager.MODE_READ_WRITE)
-                val capacity = channel.size().toInt()
-                val buffer = ByteBuffer.allocate(capacity)
-                channel.read(buffer)
-                buffer.flip()
-
-                val xml = String(buffer.array(), Charset.defaultCharset())
-
-                val docFactory: DocumentBuilderFactory = DocumentBuilderFactory.newInstance()
-                val docBuilder: DocumentBuilder = docFactory.newDocumentBuilder()
-                val doc: Document = docBuilder.parse(InputSource(StringReader(xml)))
-
-                // Modify the XML document
-                val rules = doc.getElementsByTagName("rules").item(0)
-
-                for (tracker in trackers) {
-                    val components = doc.getElementsByTagName("component-filter")
-
-                    /**
-                     * Remove the component if it already exists
-                     * This is to prevent duplicate entries
-                     */
-                    for (i in 0 until components.length) {
-                        val component = components.item(i)
-                        val name = component.attributes.getNamedItem("name").nodeValue
-
-                        if (name == "${packageInfo?.packageName}/${tracker.name}") {
-                            component.parentNode.removeChild(component)
-                        }
-                    }
-
-                    val componentFilter = doc.createElement("component-filter")
-                    componentFilter.setAttribute("name", "${packageInfo?.packageName}/${tracker.name}")
-
-                    if (tracker.isActivity) {
-                        // Check if the activity tag exists
-                        val activity = doc.getElementsByTagName("activity").item(0)
-
-                        if (activity == null) {
-                            val activity1 = doc.createElement("activity")
-                            activity1.setAttribute("block", "true")
-                            activity1.setAttribute("log", "false")
-                            activity1.appendChild(componentFilter)
-
-                            rules.appendChild(activity1)
-                        } else {
-                            /**
-                             * Check if block already exists and is true, if false
-                             * create another activity tag with block and log attributes
-                             * set to true
-                             */
-                            if (activity.attributes.getNamedItem("block") != null && activity.attributes.getNamedItem("block").nodeValue == "false") {
-                                val activity1 = doc.createElement("activity")
-                                activity1.setAttribute("block", "true")
-                                activity1.setAttribute("log", "false")
-                                activity1.appendChild(componentFilter)
-
-                                rules.appendChild(activity1)
-                            } else {
-                                activity.appendChild(componentFilter)
-                            }
-                        }
-                    }
-
-                    if (tracker.isService) {
-                        // Check if the service tag exists
-                        val service = doc.getElementsByTagName("service").item(0)
-
-                        if (service == null) {
-                            val service1 = doc.createElement("service")
-                            service1.setAttribute("block", "true")
-                            service1.setAttribute("log", "false")
-                            service1.appendChild(componentFilter)
-
-                            rules.appendChild(service1)
-                        } else {
-                            /**
-                             * Check if block already exists and is true, if false
-                             * create another service tag with block and log attributes
-                             * set to true
-                             */
-                            if (service.attributes.getNamedItem("block") != null && service.attributes.getNamedItem("block").nodeValue == "false") {
-                                val service1 = doc.createElement("service")
-                                service1.setAttribute("block", "true")
-                                service1.setAttribute("log", "false")
-                                service1.appendChild(componentFilter)
-
-                                rules.appendChild(service1)
-                            } else {
-                                service.appendChild(componentFilter)
-                            }
-                        }
-                    }
-
-                    if (tracker.isReceiver) {
-                        // Check if the broadcast tag exists
-                        val broadcast = doc.getElementsByTagName("broadcast").item(0)
-
-                        if (broadcast == null) {
-                            val broadcast1 = doc.createElement("broadcast")
-                            broadcast1.setAttribute("block", "true")
-                            broadcast1.setAttribute("log", "false")
-                            broadcast1.appendChild(componentFilter)
-
-                            rules.appendChild(broadcast1)
-                        } else {
-                            /**
-                             * Check if block already exists and is true, if false
-                             * create another broadcast tag with block and log attributes
-                             * set to true
-                             */
-                            if (broadcast.attributes.getNamedItem("block") != null && broadcast.attributes.getNamedItem("block").nodeValue == "false") {
-                                val broadcast1 = doc.createElement("broadcast")
-                                broadcast1.setAttribute("block", "true")
-                                broadcast1.setAttribute("log", "false")
-                                broadcast1.appendChild(componentFilter)
-
-                                rules.appendChild(broadcast1)
-                            } else {
-                                broadcast.appendChild(componentFilter)
-                            }
-                        }
-                    }
-                }
-
-                // Write the XML document back to the file
-                val transformerFactory: TransformerFactory = TransformerFactory.newInstance()
-                val transformer: Transformer = transformerFactory.newTransformer()
-                val source = DOMSource(doc)
-
-                channel.truncate(0)
-
-                val outputStream = file.newOutputStream()
-                val result = StreamResult(outputStream)
-                transformer.transform(source, result)
-
-                channel.close()
+                TrackerUtils.blockTrackers(trackers, getFileSystemManager()!!, path, packageInfo!!.packageName)
 
                 // Update the trackers list
                 if (trackers.size == 1 && position != -1) {
@@ -505,7 +146,7 @@ class InstallerTrackersViewModel(application: Application, private val apkFile: 
                     scanTrackers()
                 }
             }.getOrElse {
-                Log.e("TrackerBlocker", "Error: ${it.message}")
+                Log.e(TAG, "Error: ${it.message}")
                 postWarning("Error: ${it.message}")
             }
         }
@@ -514,61 +155,7 @@ class InstallerTrackersViewModel(application: Application, private val apkFile: 
     fun unblockTrackers(trackers: ArrayList<Tracker>, position: Int = -1) {
         viewModelScope.launch(Dispatchers.IO) {
             kotlin.runCatching {
-                val file: ExtendedFile = getFileSystemManager()!!.getFile(path)
-
-                if (!file.exists()) {
-                    postWarning(getString(R.string.no_rules_file_found))
-
-                    /**
-                     * Cancel the process
-                     */
-                    return@launch
-                }
-
-                val channel = getFileSystemManager()!!.openChannel(path, FileSystemManager.MODE_READ_WRITE)
-                val capacity = channel.size().toInt()
-                val buffer = ByteBuffer.allocate(capacity)
-                channel.read(buffer)
-                buffer.flip()
-
-                val xml = String(buffer.array(), Charset.defaultCharset())
-
-                val docFactory: DocumentBuilderFactory = DocumentBuilderFactory.newInstance()
-                val docBuilder: DocumentBuilder = docFactory.newDocumentBuilder()
-                val doc: Document = docBuilder.parse(InputSource(StringReader(xml)))
-
-                // Modify the XML document
-                // val rules = doc.getElementsByTagName("rules").item(0)
-
-                for (tracker in trackers) {
-                    val components = doc.getElementsByTagName("component-filter")
-
-                    /**
-                     * Remove the component if it already exists
-                     * This is to prevent duplicate entries
-                     */
-                    for (i in 0 until components.length) {
-                        val component = components.item(i)
-                        val name = component.attributes.getNamedItem("name").nodeValue
-
-                        if (name == "${packageInfo?.packageName}/${tracker.name}") {
-                            component.parentNode.removeChild(component)
-                        }
-                    }
-                }
-
-                // Write the XML document back to the file
-                val transformerFactory: TransformerFactory = TransformerFactory.newInstance()
-                val transformer: Transformer = transformerFactory.newTransformer()
-                val source = DOMSource(doc)
-
-                channel.truncate(0)
-
-                val outputStream = file.newOutputStream()
-                val result = StreamResult(outputStream)
-                transformer.transform(source, result)
-
-                channel.close()
+                TrackerUtils.unblockTrackers(trackers, getFileSystemManager()!!, path, packageInfo!!.packageName)
 
                 // Update the trackers list
                 if (trackers.size == 1 && position != -1) {
@@ -578,9 +165,13 @@ class InstallerTrackersViewModel(application: Application, private val apkFile: 
                     scanTrackers()
                 }
             }.getOrElse {
-                Log.e("TrackerBlocker", "Error: ${it.message}")
+                Log.e(TAG, "Error: ${it.message}")
                 postWarning("Error: ${it.message}")
             }
         }
+    }
+
+    companion object {
+        private const val TAG = "InstallerTrackersViewModel"
     }
 }

@@ -38,8 +38,12 @@ class Warning : ScopedBottomSheetFragment() {
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
-        if (!requireActivity().isDestroyed) {
-            warningCallbacks?.onWarningDismissed()
+        try {
+            if (!requireActivity().isDestroyed) {
+                warningCallbacks?.onWarningDismissed()
+            }
+        } catch (e: IllegalStateException) {
+            e.printStackTrace()
         }
     }
 
@@ -66,14 +70,34 @@ class Warning : ScopedBottomSheetFragment() {
 
         fun FragmentManager.showWarning(warning: String): Warning {
             val fragment = newInstance(warning)
-            fragment.show(this, "warning")
+
+            try {
+                fragment.show(this, TAG)
+            } catch (e: IllegalStateException) {
+                val transaction = beginTransaction()
+                transaction.setReorderingAllowed(true)
+                transaction.add(fragment, TAG)
+                transaction.commitAllowingStateLoss()
+            }
+
             return fragment
         }
 
         fun FragmentManager.showWarning(@StringRes warning: Int): Warning {
             val fragment = newInstance(warning)
-            fragment.show(this, "warning")
+            try {
+                fragment.show(this, TAG)
+            } catch (e: IllegalStateException) {
+                e.printStackTrace()
+                val transaction = beginTransaction()
+                transaction.setReorderingAllowed(true)
+                transaction.add(fragment, TAG)
+                transaction.commitAllowingStateLoss()
+            }
+
             return fragment
         }
+
+        const val TAG = "Warning"
     }
 }

@@ -52,7 +52,7 @@ open class CustomVerticalRecyclerView(context: Context, attrs: AttributeSet?) : 
                     edgeColor = AppearancePreferences.getAccentColor()
 
                     if (getBoolean(R.styleable.RecyclerView_statusBarPaddingRequired, true)) {
-                        if (!DevelopmentPreferences.get(DevelopmentPreferences.disableTransparentStatus)) {
+                        if (!DevelopmentPreferences.get(DevelopmentPreferences.DISABLE_TRANSPARENT_STATUS)) {
                             setPadding(paddingLeft, StatusBarHeight.getStatusBarHeight(resources) + paddingTop, paddingRight, paddingBottom)
                         }
                     }
@@ -217,7 +217,7 @@ open class CustomVerticalRecyclerView(context: Context, attrs: AttributeSet?) : 
         if (this.adapter.isNotNull()) {
             this.animate()
                 .alpha(0f)
-                .setDuration(150)
+                .setDuration(250)
                 .setInterpolator(DecelerateInterpolator())
                 .withEndAction {
                     super.setAdapter(adapter)
@@ -283,7 +283,7 @@ open class CustomVerticalRecyclerView(context: Context, attrs: AttributeSet?) : 
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            AppearancePreferences.accentColor -> {
+            AppearancePreferences.ACCENT_COLOR -> {
                 edgeColor = AppearancePreferences.getAccentColor()
                 fastScrollerBuilder?.updateAesthetics()
             }

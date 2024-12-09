@@ -1,14 +1,16 @@
 package app.simple.inure.ui.preferences.mainscreens
 
 import android.content.SharedPreferences
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.constraintlayout.widget.ConstraintLayout
 import app.simple.inure.R
 import app.simple.inure.decorations.ripple.DynamicRippleConstraintLayout
 import app.simple.inure.decorations.ripple.DynamicRippleTextView
-import app.simple.inure.decorations.switchview.SwitchView
+import app.simple.inure.decorations.toggles.Switch
 import app.simple.inure.dialogs.behavior.DampingRatio.Companion.showDampingRatioDialog
 import app.simple.inure.dialogs.behavior.Stiffness.Companion.showStiffnessDialog
 import app.simple.inure.extensions.fragments.ScopedFragment
@@ -21,18 +23,20 @@ import app.simple.inure.preferences.DevelopmentPreferences
 
 class BehaviourScreen : ScopedFragment() {
 
-    private lateinit var dimWindows: SwitchView
-    private lateinit var blurWindows: SwitchView
-    private lateinit var shadows: SwitchView
-    private lateinit var transition: SwitchView
-    private lateinit var animations: SwitchView
-    private lateinit var marquee: SwitchView
-    private lateinit var skipLoading: SwitchView
+    private lateinit var dimWindows: Switch
+    private lateinit var blurWindows: Switch
+    private lateinit var shadows: Switch
+    private lateinit var transition: Switch
+    private lateinit var animations: Switch
+    private lateinit var marquee: Switch
+    private lateinit var skipLoading: Switch
 
     private lateinit var transitionType: DynamicRippleTextView
     private lateinit var arcType: DynamicRippleTextView
     private lateinit var dampingRatio: DynamicRippleConstraintLayout
     private lateinit var stiffness: DynamicRippleConstraintLayout
+
+    private lateinit var blurWindowsContainer: ConstraintLayout
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = inflater.inflate(R.layout.preferences_behaviour, container, false)
@@ -50,6 +54,8 @@ class BehaviourScreen : ScopedFragment() {
         dampingRatio = view.findViewById(R.id.damping_ratio_container)
         stiffness = view.findViewById(R.id.stiffness_container)
 
+        blurWindowsContainer = view.findViewById(R.id.blur_windows_container)
+
         startPostponedEnterTransition()
 
         return view
@@ -58,16 +64,26 @@ class BehaviourScreen : ScopedFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        dimWindows.setChecked(BehaviourPreferences.isDimmingOn())
-        blurWindows.setChecked(BehaviourPreferences.isBlurringOn())
-        shadows.setChecked(BehaviourPreferences.areColoredShadowsOn())
-        transition.setChecked(BehaviourPreferences.isTransitionOn())
-        animations.setChecked(BehaviourPreferences.isArcAnimationOn())
-        marquee.setChecked(BehaviourPreferences.isMarqueeOn())
-        skipLoading.setChecked(BehaviourPreferences.isSkipLoading())
+        dimWindows.isChecked = BehaviourPreferences.isDimmingOn()
+        blurWindows.isChecked = BehaviourPreferences.isBlurringOn()
+        shadows.isChecked = BehaviourPreferences.isColoredShadow()
+        transition.isChecked = BehaviourPreferences.isTransitionOn()
+        animations.isChecked = BehaviourPreferences.isArcAnimationOn()
+        marquee.isChecked = BehaviourPreferences.isMarqueeOn()
+        skipLoading.isChecked = BehaviourPreferences.isSkipLoading()
 
         setTransitionType()
         setArcType()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (requireActivity().windowManager.isCrossWindowBlurEnabled) {
+                blurWindowsContainer.visibility = View.VISIBLE
+            } else {
+                blurWindowsContainer.visibility = View.GONE
+                blurWindows.isChecked = false
+                BehaviourPreferences.setBlurWindows(false)
+            }
+        }
 
         dimWindows.setOnSwitchCheckedChangeListener {
             BehaviourPreferences.setDimWindows(it)
@@ -106,7 +122,7 @@ class BehaviourScreen : ScopedFragment() {
         }
 
         dampingRatio.setOnClickListener {
-            if (DevelopmentPreferences.get(DevelopmentPreferences.oldStyleScrollingBehaviorDialog)) {
+            if (DevelopmentPreferences.get(DevelopmentPreferences.OLD_STYLE_SCROLLING_BEHAVIOR_DIALOG)) {
                 PopupDampingRatio(view)
             } else {
                 childFragmentManager.showDampingRatioDialog()
@@ -114,7 +130,7 @@ class BehaviourScreen : ScopedFragment() {
         }
 
         stiffness.setOnClickListener {
-            if (DevelopmentPreferences.get(DevelopmentPreferences.oldStyleScrollingBehaviorDialog)) {
+            if (DevelopmentPreferences.get(DevelopmentPreferences.OLD_STYLE_SCROLLING_BEHAVIOR_DIALOG)) {
                 PopupStiffness(view)
             } else {
                 childFragmentManager.showStiffnessDialog()
@@ -149,16 +165,16 @@ class BehaviourScreen : ScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            BehaviourPreferences.dampingRatio -> {
+            BehaviourPreferences.DAMPING_RATIO -> {
                 // setDampingRatio()
             }
-            BehaviourPreferences.stiffness -> {
+            BehaviourPreferences.STIFFNESS -> {
                 // setStiffness()
             }
-            BehaviourPreferences.transitionType -> {
+            BehaviourPreferences.TRANSITION_TYPE -> {
                 setTransitionType()
             }
-            BehaviourPreferences.arcType -> {
+            BehaviourPreferences.ARC_TYPE -> {
                 setArcType()
             }
         }
@@ -171,5 +187,7 @@ class BehaviourScreen : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "behaviour_screen"
     }
 }

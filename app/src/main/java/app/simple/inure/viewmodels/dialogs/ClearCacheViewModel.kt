@@ -13,13 +13,14 @@ import app.simple.inure.constants.Misc
 import app.simple.inure.constants.Warnings
 import app.simple.inure.exceptions.InureShellException
 import app.simple.inure.extensions.viewmodels.RootShizukuViewModel
+import app.simple.inure.helpers.ShizukuServiceHelper
 import app.simple.inure.shizuku.ShizukuUtils
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
-import java.util.*
+import java.util.Collections
 
 class ClearCacheViewModel(application: Application, val packageInfo: PackageInfo) : RootShizukuViewModel(application) {
     private val result: MutableLiveData<String> by lazy {
@@ -105,13 +106,6 @@ class ClearCacheViewModel(application: Application, val packageInfo: PackageInfo
     }
 
     private fun getCommand(): String {
-        //        return "rm -r -v /data/data/${packageInfo.packageName}/cache " +
-        //                "& rm -r -v /data/data/${packageInfo.packageName}/app_cache " +
-        //                "& rm -r -v /data/data/${packageInfo.packageName}/app_texture " +
-        //                "& rm -r -v /data/data/${packageInfo.packageName}/app_webview " +
-        //                "& rm -r -v /data/data/${packageInfo.packageName}/code_cache" +
-        //                "& rm -r -v /data/data/${packageInfo.packageName}/files"
-
         val packageContext: Context = applicationContext().createPackageContext(packageInfo.packageName, 0)
         val directories: MutableList<File?> = ArrayList()
         directories.add(packageContext.cacheDir)
@@ -134,7 +128,7 @@ class ClearCacheViewModel(application: Application, val packageInfo: PackageInfo
         success.postValue("Failed")
     }
 
-    override fun onShizukuCreated() {
+    override fun onShizukuCreated(shizukuServiceHelper: ShizukuServiceHelper) {
         runShizuku()
     }
 

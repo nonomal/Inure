@@ -63,15 +63,15 @@ class BatteryOptimization : ScopedFragment() {
 
             adapterBatteryOptimization.setOnItemClickListener(object : AdapterCallbacks {
                 override fun onSearchPressed(view: View) {
-                    openFragmentSlide(Search.newInstance(true), "search")
+                    openFragmentSlide(Search.newInstance(true), Search.TAG)
                 }
 
                 override fun onSettingsPressed(view: View) {
-                    openFragmentSlide(Preferences.newInstance(), "preferences")
+                    openFragmentSlide(Preferences.newInstance(), Preferences.TAG)
                 }
 
                 override fun onBatteryOptimizationClicked(view: View, batteryOptimizationModel: BatteryOptimizationModel, position: Int) {
-                    if (DevelopmentPreferences.get(DevelopmentPreferences.alternativeBatteryOptimizationSwitch)) {
+                    if (DevelopmentPreferences.get(DevelopmentPreferences.ALTERNATIVE_BATTERY_OPTIMIZATION_SWITCH)) {
                         PopupOptimizationSwitch(view, batteryOptimizationModel).setOnOptimizeClicked {
                             batteryOptimizationViewModel.getBatteryOptimizationUpdate().observe(viewLifecycleOwner) {
                                 if (it.isNotNull()) {
@@ -105,10 +105,10 @@ class BatteryOptimization : ScopedFragment() {
                         childFragmentManager.showBatteryOptimizationSort()
                     }
                     R.drawable.ic_search -> {
-                        openFragmentSlide(Search.newInstance(true), "search")
+                        openFragmentSlide(Search.newInstance(true), Search.TAG)
                     }
                     R.drawable.ic_settings -> {
-                        openFragmentSlide(Preferences.newInstance(), "preferences")
+                        openFragmentSlide(Preferences.newInstance(), Preferences.TAG)
                     }
                     R.drawable.ic_refresh -> {
                         showLoader(manualOverride = true)
@@ -121,14 +121,18 @@ class BatteryOptimization : ScopedFragment() {
                 startPostponedEnterTransition()
             }
         }
+
+        batteryOptimizationViewModel.getWarning().observe(viewLifecycleOwner) {
+            showWarning(it)
+        }
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            BatteryOptimizationPreferences.batteryOptimizationSortStyle,
-            BatteryOptimizationPreferences.batteryOptimizationIsSortingReversed,
-            BatteryOptimizationPreferences.batteryOptimizationCategory,
-            BatteryOptimizationPreferences.batteryOptimizationFilter -> {
+            BatteryOptimizationPreferences.BATTERY_OPTIMIZATION_SORT_STYLE,
+            BatteryOptimizationPreferences.BATTERY_OPTIMIZATION_IS_SORTING_REVERSED,
+            BatteryOptimizationPreferences.BATTERY_OPTIMIZATION_CATEGORY,
+            BatteryOptimizationPreferences.BATTERY_OPTIMIZATION_FILTER -> {
                 batteryOptimizationViewModel.refresh()
             }
         }
@@ -136,7 +140,12 @@ class BatteryOptimization : ScopedFragment() {
 
     companion object {
         fun newInstance(): BatteryOptimization {
-            return BatteryOptimization()
+            val args = Bundle()
+            val fragment = BatteryOptimization()
+            fragment.arguments = args
+            return fragment
         }
+
+        const val TAG = "BatteryOptimization"
     }
 }

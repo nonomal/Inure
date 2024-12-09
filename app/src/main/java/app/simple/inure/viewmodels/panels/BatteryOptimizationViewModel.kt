@@ -4,18 +4,17 @@ import android.app.Application
 import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
-import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.apk.utils.PackageUtils
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.SortConstant
 import app.simple.inure.extensions.viewmodels.RootShizukuViewModel
+import app.simple.inure.helpers.ShizukuServiceHelper
 import app.simple.inure.models.BatteryOptimizationModel
 import app.simple.inure.preferences.BatteryOptimizationPreferences
 import app.simple.inure.preferences.ConfigurationPreferences
-import app.simple.inure.shizuku.Shell.Command
-import app.simple.inure.shizuku.ShizukuUtils
 import app.simple.inure.util.FlagUtils
 import app.simple.inure.util.NullSafety.isNotNull
 import app.simple.inure.util.SortBatteryOptimization.getSortedList
@@ -50,14 +49,14 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
 
             when (BatteryOptimizationPreferences.getApplicationType()) {
                 SortConstant.SYSTEM -> {
-                    apps = apps.stream().filter { p ->
-                        p.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
+                    apps = apps.stream().filter { packageInfo ->
+                        packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
                     }.collect(Collectors.toList()) as ArrayList<PackageInfo>
                 }
 
                 SortConstant.USER -> {
-                    apps = apps.stream().filter { p ->
-                        p.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
+                    apps = apps.stream().filter { packageInfo ->
+                        packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
                     }.collect(Collectors.toList()) as ArrayList<PackageInfo>
                 }
             }
@@ -73,10 +72,7 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
 
                                 if (outData.isNotNull()) {
                                     val batteryOptimizationModel = BatteryOptimizationModel()
-
                                     val type = outData!!.subSequence(0, endIndex = outData.indexOf(",")).trim()
-                                    // val packageName = outData.subSequence(outData.indexOf(",").plus(1), outData.lastIndexOf(",")).trim()
-                                    // val uid = outData.subSequence(outData.lastIndexOf(",").plus(1), outData.length).trim()
 
                                     batteryOptimizationModel.packageInfo = packageInfo
                                     batteryOptimizationModel.type = type.toString()
@@ -86,7 +82,7 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
                                     val batteryOptimizationModel = BatteryOptimizationModel()
                                     batteryOptimizationModel.packageInfo = packageInfo
                                     batteryOptimizationModel.isOptimized = true // App is optimized for better battery life
-                                    if (packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
+                                    if (packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
                                         batteryOptimizationModel.type = BatteryOptimizationModel.TYPE_SYSTEM
                                     } else {
                                         batteryOptimizationModel.type = BatteryOptimizationModel.TYPE_USER
@@ -120,11 +116,17 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
 
                         for (app in filtered) {
                             kotlin.runCatching {
-                                app.packageInfo.applicationInfo.name = PackageUtils.getApplicationName(applicationContext(), app.packageInfo.packageName)
+                                app.packageInfo.safeApplicationInfo.name = PackageUtils.getApplicationName(applicationContext(), app.packageInfo.packageName)
                             }
                         }
 
                         filtered.getSortedList()
+
+                        // Remove duplicates
+                        filtered = filtered.distinctBy {
+                            it.packageInfo.packageName
+                        } as ArrayList<BatteryOptimizationModel>
+
                         batteryOptimizationData.postValue(filtered)
                     }
                 }
@@ -134,37 +136,36 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
         }
     }
 
-    private fun loadBatteryOptimizationShizuku() {
+    private fun loadBatteryOptimizationShizuku(shizukuServiceHelper: ShizukuServiceHelper) {
         viewModelScope.launch(Dispatchers.IO) {
             var apps = getInstalledApps()
 
             when (BatteryOptimizationPreferences.getApplicationType()) {
                 SortConstant.SYSTEM -> {
-                    apps = apps.stream().filter { p ->
-                        p.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
+                    apps = apps.stream().filter { packageInfo ->
+                        packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
                     }.collect(Collectors.toList()) as ArrayList<PackageInfo>
                 }
 
                 SortConstant.USER -> {
-                    apps = apps.stream().filter { p ->
-                        p.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
+                    apps = apps.stream().filter { packageInfo ->
+                        packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
                     }.collect(Collectors.toList()) as ArrayList<PackageInfo>
                 }
             }
 
             kotlin.runCatching {
-                ShizukuUtils.execInternal(Command("dumpsys deviceidle whitelist"), null).let { result ->
-                    Log.d("BatteryOptimizationShizukuViewModel", "loadBatteryOptimizationShizuku:\n${result.out}")
+                shizukuServiceHelper.service!!.execute(arrayListOf("dumpsys", "deviceidle", "whitelist"), null, null).let { result ->
                     apps.forEach { packageInfo ->
                         kotlin.runCatching {
-                            val outData = result.out.split("\n").find { out ->
+                            val outData = result.output!!.trim().split("\n").find { out ->
                                 packageInfo.packageName == out.subSequence(out.indexOf(",").plus(1), out.lastIndexOf(",")).trim()
                             }
 
-                            if (outData.isNotNull()) {
+                            if (outData != null) {
                                 val batteryOptimizationModel = BatteryOptimizationModel()
 
-                                val type = outData!!.subSequence(0, endIndex = outData.indexOf(",")).trim()
+                                val type = outData.subSequence(0, endIndex = outData.indexOf(",")).trim()
                                 // val packageName = outData.subSequence(outData.indexOf(",").plus(1), outData.lastIndexOf(",")).trim()
                                 // val uid = outData.subSequence(outData.lastIndexOf(",").plus(1), outData.length).trim()
 
@@ -176,13 +177,15 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
                                 val batteryOptimizationModel = BatteryOptimizationModel()
                                 batteryOptimizationModel.packageInfo = packageInfo
                                 batteryOptimizationModel.isOptimized = true // App is optimized for better battery life
-                                if (packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
+                                if (packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
                                     batteryOptimizationModel.type = BatteryOptimizationModel.TYPE_SYSTEM
                                 } else {
                                     batteryOptimizationModel.type = BatteryOptimizationModel.TYPE_USER
                                 }
                                 batteryOptimizationArrayList.add(batteryOptimizationModel)
                             }
+                        }.onFailure {
+                            it.printStackTrace()
                         }
                     }
 
@@ -206,22 +209,26 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
                         }
                     }
 
-                    filtered = filtered.distinct() as ArrayList<BatteryOptimizationModel>
+                    // Remove duplicates
+                    filtered = filtered.distinctBy {
+                        it.packageInfo.packageName
+                    } as ArrayList<BatteryOptimizationModel>
 
                     for (app in filtered) {
                         kotlin.runCatching {
-                            app.packageInfo.applicationInfo.name = PackageUtils.getApplicationName(applicationContext(), app.packageInfo.packageName)
+                            app.packageInfo.safeApplicationInfo.name = PackageUtils.getApplicationName(applicationContext(), app.packageInfo.packageName)
                         }
                     }
 
                     filtered.getSortedList()
+
                     batteryOptimizationData.postValue(filtered)
                 }
             }.getOrElse {
                 batteryOptimizationData.postValue(arrayListOf())
 
                 if (it is ClassCastException) {
-                    postWarning("ERR: Shizuku didn't respond properly for battery optimization data fetch request, try restarting your device.")
+                    postWarning("ERR: Shizuku didn't respond properly for battery optimization data fetch request, try restarting Shizuku.")
                 } else {
                     postWarning("ERR: ${it.message ?: "Unknown shizuku error while loading battery optimization data"}}")
                 }
@@ -244,8 +251,8 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
                 }
             } else if (ConfigurationPreferences.isUsingShizuku()) {
                 kotlin.runCatching {
-                    ShizukuUtils.execInternal(Command(cmd), null).let {
-                        if (it.isSuccessful) {
+                    getShizukuService().simpleExecute(cmd).let {
+                        if (it.isSuccess) {
                             // Invert the state here
                             batteryOptimizationModel.isOptimized = !batteryOptimizationModel.isOptimized
                             batteryOptimizationUpdate.postValue(Pair(batteryOptimizationModel, position))
@@ -267,14 +274,6 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
         batteryOptimizationUpdate.value = null
     }
 
-    fun isBatteryOptimizationDataEmpty(): Boolean {
-        kotlin.runCatching {
-            return batteryOptimizationData.value.isNullOrEmpty()
-        }.getOrElse {
-            return true
-        }
-    }
-
     override fun onShellCreated(shell: Shell?) {
         loadBatteryOptimizationSu()
     }
@@ -288,9 +287,9 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
         refresh()
     }
 
-    override fun onShizukuCreated() {
-        super.onShizukuCreated()
-        loadBatteryOptimizationShizuku()
+    override fun onShizukuCreated(shizukuServiceHelper: ShizukuServiceHelper) {
+        super.onShizukuCreated(shizukuServiceHelper)
+        loadBatteryOptimizationShizuku(shizukuServiceHelper)
     }
 
     override fun onAppsLoaded(apps: ArrayList<PackageInfo>) {
@@ -301,8 +300,8 @@ class BatteryOptimizationViewModel(application: Application) : RootShizukuViewMo
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         super.onSharedPreferenceChanged(sharedPreferences, key)
         when (key) {
-            ConfigurationPreferences.isUsingRoot,
-            ConfigurationPreferences.isUsingShizuku -> {
+            ConfigurationPreferences.IS_USING_ROOT,
+            ConfigurationPreferences.IS_USING_SHIZUKU -> {
                 refresh()
             }
         }

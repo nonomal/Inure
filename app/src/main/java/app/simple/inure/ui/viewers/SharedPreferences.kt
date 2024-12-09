@@ -7,7 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterResources
+import app.simple.inure.adapters.viewers.AdapterResources
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.decorations.views.CustomProgressBar
@@ -30,6 +30,7 @@ class SharedPreferences : SearchBarScopedFragment() {
 
         loader = view.findViewById(R.id.loader)
         recyclerView = view.findViewById(R.id.shared_prefs_recycler_view)
+        title = view.findViewById(R.id.shared_prefs_title)
 
         val packageInfoFactory = PackageInfoFactory(packageInfo)
         sharedPreferencesViewModel = ViewModelProvider(this, packageInfoFactory)[SharedPreferencesViewModel::class.java]
@@ -45,18 +46,19 @@ class SharedPreferences : SearchBarScopedFragment() {
         sharedPreferencesViewModel.getSharedPrefs().observe(viewLifecycleOwner) {
             loader.gone(animate = true)
             val adapterResources = AdapterResources(it, "")
+            setCount(it.size)
 
             adapterResources.setOnResourceClickListener(object : AdapterResources.ResourceCallbacks {
                 override fun onResourceClicked(path: String) {
-                    openFragmentSlide(SharedPrefsViewer.newInstance(
-                            sharedPreferencesViewModel.getSharedPrefsPath() + path, packageInfo), "shared_prefs_viewer")
+                    openFragmentSlide(SharedPrefsCode.newInstance(
+                            sharedPreferencesViewModel.getSharedPrefsPath() + path, packageInfo), SharedPrefsCode.TAG)
                 }
 
                 override fun onResourceLongClicked(path: String, view: View, position: Int) {
-                    PopupSharedPreferences(view).setOnPopupNotesMenuCallbackListener(object : PopupSharedPreferences.Companion.PopupSharedPrefsMenuCallback {
+                    PopupSharedPreferences(requireView()).setOnPopupNotesMenuCallbackListener(object : PopupSharedPreferences.Companion.PopupSharedPrefsMenuCallback {
                         override fun onOpenClicked() {
-                            openFragmentSlide(SharedPrefsViewer.newInstance(
-                                    sharedPreferencesViewModel.getSharedPrefsPath() + path, packageInfo), "shared_prefs_viewer")
+                            openFragmentSlide(SharedPrefsCode.newInstance(
+                                    sharedPreferencesViewModel.getSharedPrefsPath() + path, packageInfo), SharedPrefsCode.TAG)
                         }
 
                         override fun onDeleteClicked() {
@@ -87,7 +89,7 @@ class SharedPreferences : SearchBarScopedFragment() {
         }
 
         sharedPreferencesViewModel.getWarning().observe(viewLifecycleOwner) {
-            showWarning(it, goBack = false)
+            showWarning(it)
         }
     }
 
@@ -99,5 +101,7 @@ class SharedPreferences : SearchBarScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "shared_prefs_viewer"
     }
 }

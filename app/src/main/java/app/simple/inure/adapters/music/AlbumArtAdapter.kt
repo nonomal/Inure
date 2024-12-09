@@ -34,14 +34,14 @@ class AlbumArtAdapter(val list: ArrayList<AudioModel>) : RecyclerView.Adapter<Al
     override fun onBindViewHolder(holder: Holder, position: Int) {
         holder.albumArt.transitionName = list[position].fileUri
 
-        if (DevelopmentPreferences.get(DevelopmentPreferences.useAlternateAudioPlayerInterface)) {
-            if (DevelopmentPreferences.get(DevelopmentPreferences.loadAlbumArtFromFile)) {
+        if (DevelopmentPreferences.get(DevelopmentPreferences.USE_ALTERNATE_AUDIO_PLAYER_INTERFACE)) {
+            if (DevelopmentPreferences.get(DevelopmentPreferences.LOAD_ALBUM_ART_FROM_FILE)) {
                 holder.albumArt.loadBlurredBackgroundDescriptor(list[position].fileUri.toUri())
             } else {
                 holder.albumArt.loadBlurredBackground(list[position].artUri.toUri())
             }
         } else {
-            if (DevelopmentPreferences.get(DevelopmentPreferences.loadAlbumArtFromFile)) {
+            if (DevelopmentPreferences.get(DevelopmentPreferences.LOAD_ALBUM_ART_FROM_FILE)) {
                 holder.albumArt.loadFromFileDescriptor(list[position].fileUri.toUri())
             } else {
                 holder.albumArt.loadFromUri(list[position].artUri.toUri())
@@ -74,14 +74,14 @@ class AlbumArtAdapter(val list: ArrayList<AudioModel>) : RecyclerView.Adapter<Al
             .transform(CenterCrop())
             .load(DescriptorCoverModel(this.context, uri))
             .addListener(object : RequestListener<Bitmap> {
-                override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Bitmap>?, isFirstResource: Boolean): Boolean {
+                override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Bitmap>, isFirstResource: Boolean): Boolean {
                     this@loadFromFileDescriptor.setImageResource(R.drawable.ani_ic_app_icon).also {
                         (this@loadFromFileDescriptor.drawable as AnimatedVectorDrawable).start()
                     }
                     return true
                 }
 
-                override fun onResourceReady(resource: Bitmap?, model: Any?, target: Target<Bitmap>?, dataSource: DataSource?, isFirstResource: Boolean): Boolean {
+                override fun onResourceReady(resource: Bitmap, model: Any, target: Target<Bitmap>?, dataSource: DataSource, isFirstResource: Boolean): Boolean {
                     return false
                 }
             })
@@ -95,14 +95,14 @@ class AlbumArtAdapter(val list: ArrayList<AudioModel>) : RecyclerView.Adapter<Al
             .transform(CenterCrop())
             .load(UriCoverModel(this.context, uri))
             .addListener(object : RequestListener<Bitmap> {
-                override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Bitmap>?, isFirstResource: Boolean): Boolean {
+                override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Bitmap>, isFirstResource: Boolean): Boolean {
                     this@loadFromUri.setImageResource(R.drawable.ani_ic_app_icon).also {
                         (this@loadFromUri.drawable as AnimatedVectorDrawable).start()
                     }
                     return true
                 }
 
-                override fun onResourceReady(resource: Bitmap?, model: Any?, target: Target<Bitmap>?, dataSource: DataSource?, isFirstResource: Boolean): Boolean {
+                override fun onResourceReady(resource: Bitmap, model: Any, target: Target<Bitmap>?, dataSource: DataSource, isFirstResource: Boolean): Boolean {
                     return false
                 }
             })

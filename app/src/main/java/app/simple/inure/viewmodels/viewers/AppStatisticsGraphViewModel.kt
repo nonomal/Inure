@@ -8,6 +8,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.R
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.UsageStatsViewModel
 import app.simple.inure.models.AppUsageModel
 import app.simple.inure.models.DataUsage
@@ -15,7 +16,7 @@ import app.simple.inure.models.PackageStats
 import app.simple.inure.preferences.StatisticsPreferences
 import app.simple.inure.util.ConditionUtils.isNotZero
 import app.simple.inure.util.FileSizeHelper.getDirectoryLength
-import app.simple.inure.util.LocaleHelper
+import app.simple.inure.util.LocaleUtils
 import app.simple.inure.util.UsageInterval
 import com.github.mikephil.charting.data.BarEntry
 import com.github.mikephil.charting.data.PieEntry
@@ -26,7 +27,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
-import java.util.*
 
 class AppStatisticsGraphViewModel(application: Application, private val packageInfo: PackageInfo) : UsageStatsViewModel(application) {
 
@@ -263,7 +263,7 @@ class AppStatisticsGraphViewModel(application: Application, private val packageI
     //    }
 
     private fun getDayString(date: LocalDate): String? {
-        return date.dayOfWeek.getDisplayName(TextStyle.SHORT, LocaleHelper.getAppLocale())
+        return date.dayOfWeek.getDisplayName(TextStyle.SHORT, LocaleUtils.getAppLocale())
     }
 
     private fun Long.toLocalDate(): LocalDate {
@@ -284,7 +284,7 @@ class AppStatisticsGraphViewModel(application: Application, private val packageI
             var size = 0L
 
             for (i in apps.indices) {
-                size += apps[i].applicationInfo.sourceDir.getDirectoryLength()
+                size += apps[i].safeApplicationInfo.sourceDir.getDirectoryLength()
             }
         }
     }

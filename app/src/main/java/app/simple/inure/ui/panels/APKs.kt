@@ -16,7 +16,6 @@ import androidx.core.content.FileProvider
 import androidx.core.view.doOnPreDraw
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.selection.*
 import app.simple.inure.R
 import app.simple.inure.activities.association.ManifestAssociationActivity
 import app.simple.inure.adapters.ui.AdapterApks
@@ -25,6 +24,7 @@ import app.simple.inure.apk.utils.PackageUtils
 import app.simple.inure.apk.utils.PackageUtils.getPackageArchiveInfo
 import app.simple.inure.apk.utils.PackageUtils.getPackageInfo
 import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.BottomMenuConstants
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
@@ -33,16 +33,17 @@ import app.simple.inure.dialogs.apks.ApkScanner.Companion.showApkScanner
 import app.simple.inure.dialogs.apks.ApksMenu.Companion.showApksMenu
 import app.simple.inure.dialogs.apks.ApksSort.Companion.showApksSort
 import app.simple.inure.dialogs.app.Sure.Companion.newSureInstance
+import app.simple.inure.dialogs.miscellaneous.StoragePermission
+import app.simple.inure.dialogs.miscellaneous.StoragePermission.Companion.showStoragePermissionDialog
 import app.simple.inure.extensions.fragments.ScopedFragment
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
 import app.simple.inure.interfaces.fragments.SureCallbacks
 import app.simple.inure.models.ApkFile
 import app.simple.inure.popups.apks.PopupApkBrowser
 import app.simple.inure.preferences.ApkBrowserPreferences
-import app.simple.inure.ui.installer.Installer
 import app.simple.inure.ui.subpanels.ApksSearch
-import app.simple.inure.util.ConditionUtils.invert
 import app.simple.inure.util.FileUtils.toFile
+import app.simple.inure.util.PermissionUtils.checkStoragePermission
 import app.simple.inure.viewmodels.panels.ApkBrowserViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -72,9 +73,20 @@ class APKs : ScopedFragment() {
         postponeEnterTransition()
 
         if (fullVersionCheck()) {
-            if (apkBrowserViewModel.getApkFiles().isInitialized.invert()) {
-                apkScanner = childFragmentManager.showApkScanner()
-                // startPostponedEnterTransition()
+            if (requireContext().checkStoragePermission()) {
+                if (apkBrowserViewModel.shouldShowLoader()) {
+                    apkScanner = childFragmentManager.showApkScanner()
+                }
+            } else {
+                childFragmentManager.showStoragePermissionDialog()
+                    .setStoragePermissionCallbacks(object : StoragePermission.Companion.StoragePermissionCallbacks {
+                        override fun onStoragePermissionGranted() {
+                            if (apkBrowserViewModel.shouldShowLoader()) {
+                                apkBrowserViewModel.refresh()
+                                apkScanner = childFragmentManager.showApkScanner()
+                            }
+                        }
+                    })
             }
         }
 
@@ -82,9 +94,10 @@ class APKs : ScopedFragment() {
             postponeEnterTransition()
             apkScanner?.dismiss()
 
-            adapterApks = AdapterApks(apkFiles,
-                                      requireArguments().getString(BundleConstants.transitionName, ""),
-                                      requireArguments().getInt(BundleConstants.position, 0))
+            adapterApks = AdapterApks(
+                    paths = apkFiles,
+                    transitionName = requireArguments().getString(BundleConstants.transitionName, ""),
+                    transitionPosition = requireArguments().getInt(BundleConstants.position, 0))
 
             adapterApks.setOnItemClickListener(object : AdapterCallbacks {
                 override fun onApkClicked(view: View, position: Int, icon: ImageView) {
@@ -97,7 +110,7 @@ class APKs : ScopedFragment() {
                     requireArguments().putString(BundleConstants.transitionName, icon.transitionName)
                     requireArguments().putInt(BundleConstants.position, position)
                     // icon.transitionName = adapterApks.paths[position].absolutePath
-                    openFragmentArc(Installer.newInstance(uri), icon, "installer")
+                    openFragmentArc(Installer.newInstance(uri), icon, Installer.TAG)
                 }
 
                 override fun onApkLongClicked(view: View, position: Int, icon: ImageView) {
@@ -112,15 +125,22 @@ class APKs : ScopedFragment() {
                             requireArguments().putString(BundleConstants.transitionName, icon.transitionName)
                             requireArguments().putInt(BundleConstants.position, position)
                             // icon.transitionName = adapterApks.paths[position].absolutePath
-                            openFragmentArc(Installer.newInstance(uri), icon, "installer")
+                            openFragmentArc(Installer.newInstance(uri), icon, Installer.TAG)
                         }
 
                         override fun onDeleteClicked() {
                             childFragmentManager.newSureInstance().setOnSureCallbackListener(object : SureCallbacks {
                                 override fun onSure() {
                                     try {
-                                        if (adapterApks.paths[position].file.delete()) {
-                                            apkBrowserViewModel.delete(adapterApks.paths[position])
+                                        if (adapterApks.paths[position].file.exists()) {
+                                            if (adapterApks.paths[position].file.delete()) {
+                                                apkBrowserViewModel.remove(adapterApks.paths[position])
+                                                adapterApks.paths.removeAt(position)
+                                                adapterApks.notifyItemRemoved(position.plus(1))
+                                                adapterApks.notifyItemChanged(0) // Update the header
+                                            }
+                                        } else {
+                                            apkBrowserViewModel.remove(adapterApks.paths[position])
                                             adapterApks.paths.removeAt(position)
                                             adapterApks.notifyItemRemoved(position.plus(1))
                                             adapterApks.notifyItemChanged(0) // Update the header
@@ -167,11 +187,11 @@ class APKs : ScopedFragment() {
                                             requirePackageManager().getPackageArchiveInfo(adapterApks.paths[position].file.absolutePath, PackageUtils.flags.toInt())!!
                                         }
 
-                                        packageInfo.applicationInfo.sourceDir = adapterApks.paths[position].file.absolutePath
+                                        packageInfo.safeApplicationInfo.sourceDir = adapterApks.paths[position].file.absolutePath
                                     } else if (adapterApks.paths[position].file.absolutePath.endsWith(".apks") ||
-                                        adapterApks.paths[position].file.absolutePath.endsWith(".xapk") ||
-                                        adapterApks.paths[position].file.absolutePath.endsWith(".zip") ||
-                                        adapterApks.paths[position].file.absolutePath.endsWith(".apkm")) {
+                                            adapterApks.paths[position].file.absolutePath.endsWith(".xapk") ||
+                                            adapterApks.paths[position].file.absolutePath.endsWith(".zip") ||
+                                            adapterApks.paths[position].file.absolutePath.endsWith(".apkm")) {
 
                                         val copiedFile = requireContext().getInstallerDir(adapterApks.paths[position].file.name + ".zip") // .zip is useless here
 
@@ -179,14 +199,14 @@ class APKs : ScopedFragment() {
 
                                         for (file in copiedFile.path.substringBeforeLast(".").toFile().listFiles()!!) {
                                             packageInfo = requirePackageManager().getPackageArchiveInfo(file.absolutePath.toFile()) ?: continue
-                                            packageInfo.applicationInfo.sourceDir = file.absolutePath
-                                            packageInfo.applicationInfo.publicSourceDir = file.absolutePath
+                                            packageInfo.safeApplicationInfo.sourceDir = file.absolutePath
+                                            packageInfo.safeApplicationInfo.publicSourceDir = file.absolutePath
                                             break
                                         }
                                     } else {
                                         packageInfo = PackageInfo() // empty package info
-                                        packageInfo.applicationInfo = ApplicationInfo() // empty application info
-                                        packageInfo.applicationInfo.sourceDir = adapterApks.paths[position].file.absolutePath
+                                        packageInfo.safeApplicationInfo = ApplicationInfo() // empty application info
+                                        packageInfo.safeApplicationInfo.sourceDir = adapterApks.paths[position].file.absolutePath
                                     }
 
                                     withContext(Dispatchers.Main) {
@@ -195,14 +215,14 @@ class APKs : ScopedFragment() {
                                             icon.transitionName = packageInfo.packageName
                                             requireArguments().putString(BundleConstants.transitionName, icon.transitionName)
                                             requireArguments().putInt(BundleConstants.position, position)
-                                            packageInfo.applicationInfo.name = apkFiles[position].file.absolutePath.substringAfterLast("/")
+                                            packageInfo.safeApplicationInfo.name = apkFiles[position].file.absolutePath.substringAfterLast("/")
                                             hideLoader()
                                             openFragmentArc(AppInfo.newInstance(packageInfo), icon, "apk_info")
                                         } else {
                                             icon.transitionName = packageInfo.packageName
                                             requireArguments().putString(BundleConstants.transitionName, icon.transitionName)
                                             requireArguments().putInt(BundleConstants.position, position)
-                                            packageInfo.applicationInfo.name = apkFiles[position].file.absolutePath.substringAfterLast("/")
+                                            packageInfo.safeApplicationInfo.name = apkFiles[position].file.absolutePath.substringAfterLast("/")
                                             hideLoader()
                                             openFragmentArc(AppInfo.newInstance(packageInfo), icon, "apk_info")
                                         }
@@ -251,7 +271,7 @@ class APKs : ScopedFragment() {
                     }
 
                     R.drawable.ic_search -> {
-                        openFragmentSlide(ApksSearch.newInstance(), "apks_search")
+                        openFragmentSlide(ApksSearch.newInstance(), ApksSearch.TAG)
                     }
 
                     R.drawable.ic_filter -> {
@@ -281,10 +301,11 @@ class APKs : ScopedFragment() {
                         childFragmentManager.newSureInstance().setOnSureCallbackListener(object : SureCallbacks {
                             override fun onSure() {
                                 if (adapterApks.paths.any { it.isSelected }) {
-                                    @Suppress("UNCHECKED_CAST") val selectedApks =
-                                        (adapterApks.paths.clone() as ArrayList<ApkFile>).filter {
-                                            it.isSelected
-                                        }
+                                    @Suppress("UNCHECKED_CAST")
+                                    val selectedApks = (adapterApks.paths.clone() as ArrayList<ApkFile>).filter {
+                                        it.isSelected
+                                    }
+
                                     for (apk in selectedApks) {
                                         if (apk.file.exists()) {
                                             if (apk.file.delete()) {
@@ -295,6 +316,11 @@ class APKs : ScopedFragment() {
                                             } else {
                                                 showWarning("Failed to delete ${apk.file.name}", false)
                                             }
+                                        } else {
+                                            val position = adapterApks.paths.indexOf(apk)
+                                            adapterApks.paths.remove(apk)
+                                            adapterApks.notifyItemRemoved(position.plus(1))
+                                            adapterApks.notifyItemChanged(0) // Update the header
                                         }
                                     }
 
@@ -308,6 +334,8 @@ class APKs : ScopedFragment() {
                     }
                 }
             }
+
+            updateBottomMenu()
         }
     }
 
@@ -322,21 +350,21 @@ class APKs : ScopedFragment() {
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         super.onSharedPreferenceChanged(sharedPreferences, key)
         when (key) {
-            ApkBrowserPreferences.loadSplitIcon -> {
+            ApkBrowserPreferences.LOAD_SPLIT_ICON -> {
                 adapterApks.loadSplitIcon()
             }
 
-            ApkBrowserPreferences.apkFilter -> {
+            ApkBrowserPreferences.APK_FILTER -> {
                 apkBrowserViewModel.filter()
             }
 
-            ApkBrowserPreferences.reversed,
-            ApkBrowserPreferences.sortStyle,
-            -> {
+            ApkBrowserPreferences.REVERSED,
+            ApkBrowserPreferences.SORT_STYLE,
+                -> {
                 apkBrowserViewModel.sort()
             }
 
-            ApkBrowserPreferences.externalStorage -> {
+            ApkBrowserPreferences.EXTERNAL_STORAGE -> {
                 apkBrowserViewModel.refresh()
                 apkScanner = childFragmentManager.showApkScanner()
             }
@@ -350,5 +378,7 @@ class APKs : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "APKs"
     }
 }

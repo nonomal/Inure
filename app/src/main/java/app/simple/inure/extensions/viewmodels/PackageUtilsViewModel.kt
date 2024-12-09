@@ -2,7 +2,12 @@ package app.simple.inure.extensions.viewmodels
 
 import android.annotation.SuppressLint
 import android.app.Application
-import android.content.*
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -13,6 +18,7 @@ import android.util.Log
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import app.simple.inure.R
 import app.simple.inure.apk.utils.PackageUtils
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.services.DataLoaderService
 import app.simple.inure.util.ArrayUtils
 
@@ -97,6 +103,10 @@ abstract class PackageUtilsViewModel(application: Application) : WrappedViewMode
         return dataLoaderService!!.getUninstalledApps()
     }
 
+    fun getCompleteApps(): List<PackageInfo> {
+        return getInstalledApps() + getUninstalledApps()
+    }
+
     fun refreshPackageData() {
         dataLoaderService!!.refresh()
     }
@@ -129,7 +139,7 @@ abstract class PackageUtilsViewModel(application: Application) : WrappedViewMode
 
     protected fun PackageManager.isPackageEnabled(packageName: String): Boolean {
         return try {
-            getPackageInfo(packageName)!!.applicationInfo.enabled
+            getPackageInfo(packageName)!!.safeApplicationInfo.enabled
         } catch (e: PackageManager.NameNotFoundException) {
             false
         } catch (e: NullPointerException) {
@@ -209,7 +219,7 @@ abstract class PackageUtilsViewModel(application: Application) : WrappedViewMode
 
     protected fun ArrayList<PackageInfo>.loadPackageNames(): ArrayList<PackageInfo> {
         forEach {
-            it.applicationInfo.name = getApplicationName(application.applicationContext, it.applicationInfo)
+            it.safeApplicationInfo.name = getApplicationName(applicationContext(), it.safeApplicationInfo)
         }
 
         return this
@@ -227,7 +237,7 @@ abstract class PackageUtilsViewModel(application: Application) : WrappedViewMode
         super.onCleared()
         try {
             serviceConnection?.let {
-                application.applicationContext.unbindService(it)
+                applicationContext().unbindService(it)
             }
         } catch (e: java.lang.IllegalStateException) {
             e.printStackTrace()

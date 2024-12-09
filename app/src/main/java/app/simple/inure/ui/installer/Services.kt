@@ -1,8 +1,17 @@
 package app.simple.inure.ui.installer
 
-import app.simple.inure.extensions.fragments.ScopedBottomSheetFragment
+import android.view.ViewGroup
+import app.simple.inure.extensions.fragments.ScopedFragment
 
-class Services : ScopedBottomSheetFragment() {
+class Services : ScopedFragment() {
+
+    override fun setupBackPressedDispatcher() {
+        /* no-op */
+    }
+
+    override fun setupBackPressedCallback(view: ViewGroup) {
+        /* no-op */
+    }
 
     companion object {
         fun newInstance(): Services {

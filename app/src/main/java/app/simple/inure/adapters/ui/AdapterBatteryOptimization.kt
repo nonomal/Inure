@@ -6,10 +6,10 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
-import app.simple.inure.apk.parsers.FOSSParser
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.SortConstant
+import app.simple.inure.decorations.condensed.CondensedDynamicRippleConstraintLayout
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
-import app.simple.inure.decorations.ripple.DynamicRippleConstraintLayout
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.AppIconImageView
 import app.simple.inure.glide.modules.GlideApp
@@ -17,8 +17,12 @@ import app.simple.inure.glide.util.ImageLoader.loadAppIcon
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
 import app.simple.inure.models.BatteryOptimizationModel
 import app.simple.inure.preferences.BatteryOptimizationPreferences
-import app.simple.inure.util.*
+import app.simple.inure.util.AdapterUtils.setAppVisualStates
 import app.simple.inure.util.ConditionUtils.invert
+import app.simple.inure.util.LocaleUtils
+import app.simple.inure.util.RecyclerViewUtils
+import app.simple.inure.util.SortBatteryOptimization
+import app.simple.inure.util.StatusBarHeight
 
 class AdapterBatteryOptimization(private val apps: ArrayList<BatteryOptimizationModel>) : RecyclerView.Adapter<VerticalListViewHolder>() {
 
@@ -27,7 +31,7 @@ class AdapterBatteryOptimization(private val apps: ArrayList<BatteryOptimization
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VerticalListViewHolder {
         return when (viewType) {
             RecyclerViewUtils.TYPE_HEADER -> {
-                if (LocaleHelper.isAppRussianLocale() && StatusBarHeight.isLandscape(parent.context).invert()) {
+                if (LocaleUtils.isAppRussianLocale() && StatusBarHeight.isLandscape(parent.context).invert()) {
                     Header(LayoutInflater.from(parent.context)
                                .inflate(R.layout.adapter_header_battery_optimization_ru, parent, false))
                 } else {
@@ -53,19 +57,18 @@ class AdapterBatteryOptimization(private val apps: ArrayList<BatteryOptimization
 
         if (holder is Holder) {
             holder.icon.transitionName = apps[position].packageInfo.packageName
-            holder.icon.loadAppIcon(apps[position].packageInfo.packageName, apps[position].packageInfo.applicationInfo.enabled)
-            holder.name.text = apps[position].packageInfo.applicationInfo.name
+            holder.icon.loadAppIcon(apps[position].packageInfo.packageName, apps[position].packageInfo.safeApplicationInfo.enabled)
+            holder.name.text = apps[position].packageInfo.safeApplicationInfo.name
             holder.packageId.text = apps[position].packageInfo.packageName
 
-            holder.name.setStrikeThru(apps[position].packageInfo.applicationInfo.enabled)
-            holder.name.setFOSSIcon(FOSSParser.isPackageFOSS(apps[position].packageInfo.packageName))
+            holder.name.setAppVisualStates(apps[position].packageInfo)
 
             holder.data.text = with(StringBuilder()) {
                 append(holder.getString(getAppType(apps[position].type)))
                 append(" | ")
                 append(holder.getString(isOptimized(apps[position].isOptimized)))
                 append(" | ")
-                append(apps[position].packageInfo.applicationInfo.uid)
+                append(apps[position].packageInfo.safeApplicationInfo.uid)
                 this
             }
 
@@ -206,7 +209,7 @@ class AdapterBatteryOptimization(private val apps: ArrayList<BatteryOptimization
         val name: TypeFaceTextView = itemView.findViewById(R.id.adapter_battery_app_name)
         val packageId: TypeFaceTextView = itemView.findViewById(R.id.adapter_battery_app_package_id)
         val data: TypeFaceTextView = itemView.findViewById(R.id.adapter_battery_data)
-        val container: DynamicRippleConstraintLayout = itemView.findViewById(R.id.adapter_battery_container)
+        val container: CondensedDynamicRippleConstraintLayout = itemView.findViewById(R.id.adapter_battery_container)
     }
 
     inner class Header(itemView: View) : VerticalListViewHolder(itemView) {

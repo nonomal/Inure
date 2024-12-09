@@ -24,7 +24,6 @@ import androidx.annotation.Nullable;
 import app.simple.inure.BuildConfig;
 import app.simple.inure.preferences.ShellPreferences;
 import app.simple.inure.util.IOUtils;
-import rikka.shizuku.Shizuku;
 import rikka.shizuku.ShizukuBinderWrapper;
 import rikka.shizuku.ShizukuRemoteProcess;
 import rikka.shizuku.SystemServiceHelper;
@@ -32,6 +31,10 @@ import rikka.shizuku.SystemServiceHelper;
 public class ShizukuUtils {
     
     private static final String TAG = "ShizukuUtils";
+    
+    /**
+     * @noinspection unused
+     */
     private static final String rishPath = "/data/local/tmp/rish";
     
     @SuppressLint ("PrivateApi")
@@ -52,9 +55,9 @@ public class ShizukuUtils {
         Class <?> iPmStub = Class.forName("android.content.pm.IPackageManager$Stub");
         Method asInterfaceMethod = iPmStub.getMethod("asInterface", IBinder.class);
         iPmInstance = asInterfaceMethod.invoke(null, new ShizukuBinderWrapper(SystemServiceHelper.getSystemService("package")));
-    
+        
         setApplicationEnabledSetting = iPmClass.getMethod("setApplicationEnabledSetting", String.class, int.class, int.class, int.class, String.class);
-    
+        
         for (String packageName : pkgNames) {
             setApplicationEnabledSetting.invoke(iPmInstance, packageName,
                     disabled ? PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER : PackageManager.COMPONENT_ENABLED_STATE_DEFAULT, 0, Os.getuid() / 100000,
@@ -76,14 +79,14 @@ public class ShizukuUtils {
         Log.d("ShizukuHider", "setAppHidden: " + hidden);
         Method setApplicationHiddenSetting;
         Object iPmInstance;
-    
+        
         Class <?> iPmClass = Class.forName("android.content.pm.IPackageManager");
         Class <?> iPmStub = Class.forName("android.content.pm.IPackageManager$Stub");
         Method asInterfaceMethod = iPmStub.getMethod("asInterface", IBinder.class);
         iPmInstance = asInterfaceMethod.invoke(null, new ShizukuBinderWrapper(SystemServiceHelper.getSystemService("package")));
-    
+        
         setApplicationHiddenSetting = iPmClass.getMethod("setApplicationHiddenSettingAsUser", String.class, boolean.class, int.class, int.class);
-    
+        
         for (String packageName : pkgNames) {
             setApplicationHiddenSetting.invoke(iPmInstance, packageName, hidden, 0, Os.getuid() / 100000);
             Log.i("ShizukuHider", "Hid app: " + packageName);
@@ -144,16 +147,16 @@ public class ShizukuUtils {
         Method asInterfaceMethod = iPmStub.getMethod("asInterface", IBinder.class);
         iPmInstance = asInterfaceMethod.invoke(null, new ShizukuBinderWrapper(SystemServiceHelper.getSystemService("package")));
         
-        setComponentEnabledSetting = iPmClass.getMethod("setComponentEnabledSetting", ComponentName.class, int.class, int.class, int.class);
+        setComponentEnabledSetting = iPmClass.getMethod("setComponentEnabledSetting", ComponentName.class, int.class, int.class);
         
         setComponentEnabledSetting.invoke(iPmInstance,
                 new ComponentName(packageName, componentName),
                 enabled ? PackageManager.COMPONENT_ENABLED_STATE_DISABLED : PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                PackageManager.DONT_KILL_APP,
-                0);
+                PackageManager.DONT_KILL_APP);
         Log.i("ShizukuHider", "Updated component state: " + packageName);
     }
     
+    @Deprecated
     public static Shell.Result execInternal(Shell.Command command, @Nullable InputStream inputPipe) {
         StringBuilder stdOutSb = new StringBuilder();
         StringBuilder stdErrSb = new StringBuilder();
@@ -161,8 +164,7 @@ public class ShizukuUtils {
         try {
             Shell.Command.Builder shCommand = new Shell.Command.Builder("sh", "-c", command.toString());
             
-            //noinspection deprecation
-            ShizukuRemoteProcess process = Shizuku.newProcess(shCommand.build().toStringArray(), null, null);
+            ShizukuRemoteProcess process = null; // Shizuku.newProcess(shCommand.build().toStringArray(), null, null);
             
             Thread stdOutD = IOUtils.writeStreamToStringBuilder(stdOutSb, process.getInputStream());
             Thread stdErrD = IOUtils.writeStreamToStringBuilder(stdErrSb, process.getErrorStream());
@@ -173,7 +175,7 @@ public class ShizukuUtils {
                 } catch (Exception e) {
                     stdOutD.interrupt();
                     stdErrD.interrupt();
-    
+                    
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         process.destroyForcibly();
                     } else {
@@ -187,7 +189,7 @@ public class ShizukuUtils {
             process.waitFor();
             stdOutD.join();
             stdErrD.join();
-    
+            
             return new Shell.Result(command, process.exitValue(), stdOutSb.toString().trim(), stdErrSb.toString().trim());
         } catch (Exception e) {
             Log.w(TAG, "Unable execute command: ");
@@ -206,14 +208,25 @@ public class ShizukuUtils {
             OutputStream out = null;
             try {
                 in = assetManager.open(filename);
-    
-                File outFile = new File(ShellPreferences.INSTANCE.getHomePath(), filename.substring(filename.lastIndexOf('/') + 1));
-    
+                
+                File outFile = new File(ShellPreferences.INSTANCE.getHomePath(),
+                        filename.substring(filename.lastIndexOf('/') + 1));
+                
                 if (outFile.exists()) {
                     Log.e("Shizuku", "File already exists: " + outFile.getAbsolutePath());
                 } else {
                     out = new FileOutputStream(outFile);
                     copyFile(in, out);
+                }
+                
+                // Set read only
+                //noinspection ResultOfMethodCallIgnored
+                outFile.setExecutable(true);
+                
+                if (outFile.setReadOnly()) {
+                    Log.i("Shizuku", "Set read only: " + outFile.getAbsolutePath());
+                } else {
+                    Log.e("Shizuku", "Failed to set read only: " + outFile.getAbsolutePath());
                 }
             } catch (IOException e) {
                 Log.e("Shizuku", "Failed to copy asset file: " + filename, e);
@@ -237,8 +250,7 @@ public class ShizukuUtils {
     }
     
     public static String getRishCommand() {
-        String echo = "echo Starting rish...";
-        return echo + " && clear && cd $HOME && clear && sh rish && clear";
+        return "clear && cd $HOME && clear && sh rish";
     }
     
     private static void copyFile(InputStream in, OutputStream out) throws IOException {

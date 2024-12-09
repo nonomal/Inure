@@ -1,5 +1,6 @@
 package app.simple.inure.util
 
+import android.app.ActivityManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -78,6 +79,11 @@ object ActivityUtils {
         startActivity(context, launchIntent, null)
     }
 
+    fun Context.isAppInLockTaskMode(): Boolean {
+        val activityManager: ActivityManager = this.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return (activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE)
+    }
+
     @kotlin.jvm.Throws(java.lang.IllegalArgumentException::class)
     fun isEnabled(context: Context, packageName: String, clsName: String): Boolean {
         val componentName = ComponentName(packageName, clsName)
@@ -107,7 +113,7 @@ object ActivityUtils {
                     val components: ArrayList<ComponentInfo> = ArrayList()
 
                     if (packageInfo.activities.isNotNull()) {
-                        for (i in packageInfo.activities) {
+                        for (i in packageInfo.activities!!) {
                             components.add(i)
                         }
                     }
@@ -147,7 +153,7 @@ object ActivityUtils {
                     val components: ArrayList<ComponentInfo> = ArrayList()
 
                     if (packageInfo.activities.isNotNull()) {
-                        for (i in packageInfo.activities) {
+                        for (i in packageInfo.activities!!) {
                             components.add(i)
                         }
                     }

@@ -3,13 +3,12 @@ package app.simple.inure.apk.parsers
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import app.simple.inure.R
+import app.simple.inure.constants.Extensions.isExtrasFile
+import app.simple.inure.constants.Extensions.isImageFile
 import app.simple.inure.exceptions.ApkParserException
 import app.simple.inure.exceptions.DexClassesNotFoundException
-import app.simple.inure.util.ConditionUtils.invert
-import app.simple.inure.util.FileUtils.isImageFile
-import app.simple.inure.util.FileUtils.toFile
-import app.simple.inure.util.LocaleHelper
-import com.jaredrummler.apkparser.ApkParser
+import app.simple.inure.models.Extra
+import app.simple.inure.models.Graphic
 import net.dongliu.apk.parser.ApkFile
 import net.dongliu.apk.parser.bean.ApkMeta
 import net.dongliu.apk.parser.bean.DexClass
@@ -19,6 +18,7 @@ import java.util.Enumeration
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
+@Suppress("ConstPropertyName")
 object APKParser {
 
     private const val ARMEABI = "armeabi"
@@ -27,30 +27,6 @@ object APKParser {
     private const val MIPS = "mips"
     private const val x86 = "x86"
     private const val x86_64 = "x86_64"
-
-    /**
-     * Fetch the decompiled manifest from an APK file
-     */
-    fun ApplicationInfo.extractManifest(): String? {
-        kotlin.runCatching {
-            kotlin.runCatching {
-                ApkParser.create(this.sourceDir.toFile()).use {
-                    it.preferredLocale = LocaleHelper.getAppLocale()
-                    return it.androidManifest.xml
-                }
-            }.getOrElse {
-                ApkFile(sourceDir).use {
-                    it.preferredLocale = LocaleHelper.getAppLocale()
-                    return it.manifestXml
-                }
-            }
-        }.onFailure { throwable ->
-            throwable.printStackTrace()
-            return ApkManifestFetcher.getManifestXmlFromFilePath(sourceDir)
-        }.getOrElse {
-            throw ApkParserException("Couldn't parse manifest file due to error : ${it.message}")
-        }
-    }
 
     /**
      * Fetch the install location of an APK file
@@ -135,7 +111,7 @@ object APKParser {
                             }
 
                             stringBuilder.append(ARMEABI)
-                            stringBuilder.append(" “generic” 32-bit ARM")
+                            stringBuilder.append(" \"generic\" 32-bit ARM")
                         }
                     }
 
@@ -195,6 +171,11 @@ object APKParser {
             if (stringBuilder.isBlank()) {
                 stringBuilder.append(context.getString(R.string.error))
             }
+        } catch (e: NullPointerException) {
+            e.printStackTrace()
+            if (stringBuilder.isBlank()) {
+                stringBuilder.append(context.getString(R.string.not_available))
+            }
         } finally {
             if (zipFile != null) {
                 try {
@@ -205,8 +186,25 @@ object APKParser {
             }
         }
 
-        if (stringBuilder.isBlank()) {
-            stringBuilder.append(context.getString(R.string.unspecified))
+        when {
+            stringBuilder.isBlank() -> {
+                stringBuilder.append(context.getString(R.string.unspecified))
+            }
+            else -> {
+                // Append 32 bit and 64 bit to the start of the string
+                // If it contains the familiar architecture
+                if (stringBuilder.contains(ARMEABI) ||
+                        stringBuilder.contains(ARMv7) ||
+                        stringBuilder.contains(x86) ||
+                        stringBuilder.contains(MIPS)) {
+                    stringBuilder.insert(0, "32-bit | ")
+                }
+
+                if (stringBuilder.contains(ARM64) ||
+                        stringBuilder.contains(x86_64)) {
+                    stringBuilder.insert(0, "64-bit | ")
+                }
+            }
         }
 
         return stringBuilder
@@ -242,7 +240,7 @@ object APKParser {
     /**
      * Get list of all xml files within an APK file
      */
-    fun getXmlFiles(path: String?, keyword: String): MutableList<String> {
+    fun getXmlFiles(path: String?, keyword: String, ignoreCase: Boolean = true): MutableList<String> {
         val xmlFiles: MutableList<String> = ArrayList()
         var zipFile: ZipFile? = null
         try {
@@ -251,8 +249,10 @@ object APKParser {
             while (entries.hasMoreElements()) {
                 val entry: ZipEntry? = entries.nextElement()
                 val name: String = entry!!.name
-                if (name.endsWith(".xml") && name != "AndroidManifest.xml") {
-                    if (name.contains(keyword)) xmlFiles.add(name)
+                if (name.lowercase().endsWith(".xml") && name != "AndroidManifest.xml") {
+                    if (name.contains(keyword, ignoreCase)) {
+                        xmlFiles.add(name)
+                    }
                 }
             }
         } catch (e: IOException) {
@@ -275,9 +275,9 @@ object APKParser {
     /**
      * Get list of all raster image files within an APK file
      */
-    fun getGraphicsFiles(path: String?, keyword: String): MutableList<String> {
+    fun getGraphicsFiles(path: String?, keyword: String): MutableList<Graphic> {
 
-        val graphicsFiles: MutableList<String> = ArrayList()
+        val graphicsFiles: MutableList<Graphic> = ArrayList()
         var zipFile: ZipFile? = null
         try {
             zipFile = ZipFile(path)
@@ -285,24 +285,38 @@ object APKParser {
             while (entries.hasMoreElements()) {
 
                 val entry: ZipEntry? = entries.nextElement()
-                val name: String = entry!!.name
+                val entryPath: String = entry!!.name // is a path
+                val graphic = Graphic()
 
-                if (keyword.lowercase().startsWith("$")) {
-                    if (name.lowercase().endsWith(keyword.lowercase().replace("$", ""))) {
-                        if (name.lowercase().isImageFile()) {
-                            graphicsFiles.add(name)
+                when {
+                    keyword.lowercase().startsWith("$") -> {
+                        if (entryPath.lowercase().endsWith(keyword.lowercase().replace("$", ""))) {
+                            if (entryPath.lowercase().isImageFile()) {
+                                graphic.path = entryPath
+                                graphic.name = entryPath.substringAfterLast("/")
+                                graphic.size = entry.size
+                                graphicsFiles.add(graphic)
+                            }
                         }
                     }
-                } else if (keyword.lowercase().endsWith("$")) {
-                    if (name.lowercase().startsWith(keyword.lowercase().replace("$", ""))) {
-                        if (name.lowercase().isImageFile()) {
-                            graphicsFiles.add(name)
+                    keyword.lowercase().endsWith("$") -> {
+                        if (entryPath.lowercase().startsWith(keyword.lowercase().replace("$", ""))) {
+                            if (entryPath.lowercase().isImageFile()) {
+                                graphic.path = entryPath
+                                graphic.name = entryPath.substringAfterLast("/")
+                                graphic.size = entry.size
+                                graphicsFiles.add(graphic)
+                            }
                         }
                     }
-                } else {
-                    if (name.lowercase().contains(keyword.lowercase())) {
-                        if (name.lowercase().isImageFile()) {
-                            graphicsFiles.add(name)
+                    else -> {
+                        if (entryPath.lowercase().contains(keyword.lowercase())) {
+                            if (entryPath.lowercase().isImageFile()) {
+                                graphic.path = entryPath
+                                graphic.name = entryPath.substringAfterLast("/")
+                                graphic.size = entry.size
+                                graphicsFiles.add(graphic)
+                            }
                         }
                     }
                 }
@@ -317,16 +331,16 @@ object APKParser {
                 }
             }
         }
-        graphicsFiles.sort()
+
         return graphicsFiles
     }
 
     /**
      * Get list of all raster image files within an APK file
      */
-    fun getExtraFiles(path: String?, keyword: String): MutableList<String> {
+    fun getExtraFiles(path: String?, keyword: String): MutableList<Extra> {
 
-        val extraFiles: MutableList<String> = ArrayList()
+        val extraFiles: MutableList<Extra> = ArrayList()
         var zipFile: ZipFile? = null
 
         try {
@@ -334,45 +348,34 @@ object APKParser {
             val entries: Enumeration<out ZipEntry?> = zipFile.entries()
             while (entries.hasMoreElements()) {
                 val entry: ZipEntry? = entries.nextElement()
-                val name: String = entry!!.name
+                val name: String = entry!!.name // is a path
+                val extra = Extra()
 
                 if (keyword.lowercase().startsWith("$")) {
                     if (name.lowercase().endsWith(keyword.lowercase().replace("$", ""))) {
-                        if (name.endsWith(".xml") ||
-                            name.endsWith(".so") ||
-                            name.endsWith(".dex") ||
-                            name.endsWith(".arsc")) {
-                            continue
-                        } else {
-                            if (name.isImageFile().invert()) {
-                                extraFiles.add(name)
-                            }
+                        if (name.isExtrasFile()) {
+                            extra.path = name
+                            extra.name = name.substringAfterLast("/")
+                            extra.size = entry.size
+                            extraFiles.add(extra)
                         }
                     }
                 } else if (keyword.lowercase().endsWith("$")) {
                     if (name.lowercase().startsWith(keyword.lowercase().replace("$", ""))) {
-                        if (name.endsWith(".xml") ||
-                            name.endsWith(".so") ||
-                            name.endsWith(".dex") ||
-                            name.endsWith(".arsc")) {
-                            continue
-                        } else {
-                            if (name.isImageFile().invert()) {
-                                extraFiles.add(name)
-                            }
+                        if (name.isExtrasFile()) {
+                            extra.path = name
+                            extra.name = name.substringAfterLast("/")
+                            extra.size = entry.size
+                            extraFiles.add(extra)
                         }
                     }
                 } else {
                     if (name.lowercase().contains(keyword.lowercase())) {
-                        if (name.endsWith(".xml") ||
-                            name.endsWith(".so") ||
-                            name.endsWith(".dex") ||
-                            name.endsWith(".arsc")) {
-                            continue
-                        } else {
-                            if (name.isImageFile().invert()) {
-                                extraFiles.add(name)
-                            }
+                        if (name.isExtrasFile()) {
+                            extra.path = name
+                            extra.name = name.substringAfterLast("/")
+                            extra.size = entry.size
+                            extraFiles.add(extra)
                         }
                     }
                 }
@@ -383,10 +386,6 @@ object APKParser {
             kotlin.runCatching {
                 zipFile?.close()
             }
-        }
-
-        extraFiles.sortBy {
-            it.lowercase()
         }
 
         return extraFiles

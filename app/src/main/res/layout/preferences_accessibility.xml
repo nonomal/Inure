@@ -43,12 +43,15 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
+            android:clipChildren="false"
             app:layout_behavior="@string/over_scroll_behavior">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:animateLayoutChanges="true"
+                android:clipChildren="false"
+                android:clipToPadding="false"
                 android:orientation="vertical">
 
                 <app.simple.inure.decorations.theme.ThemeDivider
@@ -118,9 +121,9 @@
                         app:layout_constraintTop_toBottomOf="@id/highlight_tag"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/highlight_switch"
-                        android:layout_width="@dimen/switch_width"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:clipChildren="false"
@@ -185,9 +188,9 @@
                         app:layout_constraintTop_toBottomOf="@+id/highlight_stroke_tag"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/highlight_stroke_switch"
-                        android:layout_width="@dimen/switch_width"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:clipChildren="false"
@@ -251,9 +254,9 @@
                         app:layout_constraintTop_toBottomOf="@id/colored_icons_title"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/colorful_icons_switch"
-                        android:layout_width="@dimen/switch_width"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:clipChildren="false"
@@ -417,9 +420,9 @@
                         app:layout_constraintTop_toBottomOf="@id/list_divider_tag"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/list_divider_switch"
-                        android:layout_width="@dimen/switch_width"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:clipChildren="false"
@@ -493,9 +496,9 @@
                         app:layout_constraintTop_toBottomOf="@id/reduce_animation_tag"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/reduce_animation_switch"
-                        android:layout_width="@dimen/switch_width"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:clipChildren="false"
@@ -569,9 +572,9 @@
                         app:layout_constraintTop_toBottomOf="@id/enable_context_tag"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/enable_context_switch"
-                        android:layout_width="@dimen/switch_width"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:clipChildren="false"

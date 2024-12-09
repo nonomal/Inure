@@ -45,6 +45,7 @@ class BootManager : ScopedFragment() {
         fullVersionCheck()
 
         bootManagerViewModel?.getBootComponentData()?.observe(viewLifecycleOwner) { bootComponentData ->
+            hideLoader()
             postponeEnterTransition()
 
             adapterBootManager = AdapterBootManager(bootComponentData)
@@ -98,13 +99,18 @@ class BootManager : ScopedFragment() {
             bottomRightCornerMenu?.initBottomMenuWithRecyclerView(BottomMenuConstants.getBootManagerBottomMenuItems(), recyclerView) { id, _ ->
                 when (id) {
                     R.drawable.ic_settings -> {
-                        openFragmentSlide(Preferences.newInstance(), "preferences")
+                        openFragmentSlide(Preferences.newInstance(), Preferences.TAG)
                     }
                     R.drawable.ic_search -> {
-                        openFragmentSlide(Search.newInstance(firstLaunch = true), "search")
+                        openFragmentSlide(Search.newInstance(firstLaunch = true), Search.TAG)
                     }
                     R.drawable.ic_filter -> {
                         childFragmentManager.showBootManagerSort()
+                    }
+                    R.drawable.ic_refresh -> {
+                        showLoader(manualOverride = true).also {
+                            bootManagerViewModel?.reloadBootComponentData()
+                        }
                     }
                 }
             }
@@ -121,12 +127,12 @@ class BootManager : ScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            BootManagerPreferences.appsCategory,
-            BootManagerPreferences.filter -> {
+            BootManagerPreferences.APPS_CATEGORY,
+            BootManagerPreferences.FILTER -> {
                 bootManagerViewModel?.reloadBootComponentData()
             }
-            BootManagerPreferences.sortingStyle,
-            BootManagerPreferences.sortingReversed -> {
+            BootManagerPreferences.SORTING_STYLE,
+            BootManagerPreferences.SORTING_REVERSED -> {
                 bootManagerViewModel?.sortBootComponentData()
             }
         }
@@ -139,5 +145,7 @@ class BootManager : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "BootManager"
     }
 }

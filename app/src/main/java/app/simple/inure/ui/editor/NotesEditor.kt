@@ -23,9 +23,13 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.addCallback
+import androidx.core.text.PrecomputedTextCompat
+import androidx.core.widget.TextViewCompat
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import app.simple.inure.R
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.ime.InsetsAnimationLinearLayout
 import app.simple.inure.decorations.ripple.DynamicRippleImageButton
@@ -62,6 +66,9 @@ import app.simple.inure.util.ViewUtils.gone
 import app.simple.inure.util.ViewUtils.visible
 import app.simple.inure.viewmodels.panels.NotesEditorViewModel
 import app.simple.inure.viewmodels.panels.NotesViewModel
+import com.anggrayudi.storage.extension.launchOnUiThread
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class NotesEditor : KeyboardScopedFragment() {
 
@@ -139,8 +146,8 @@ class NotesEditor : KeyboardScopedFragment() {
         super.onViewCreated(view, savedInstanceState)
         fullVersionCheck()
 
-        icon.loadAppIcon(packageInfo.packageName, packageInfo.applicationInfo.enabled, packageInfo.applicationInfo.sourceDir.toFile())
-        name.text = packageInfo.applicationInfo.name
+        icon.loadAppIcon(packageInfo.packageName, packageInfo.safeApplicationInfo.enabled, packageInfo.safeApplicationInfo.sourceDir.toFile())
+        name.text = packageInfo.safeApplicationInfo.name
         packageId.text = packageInfo.packageName
         noteEditText.setWindowInsetsAnimationCallback()
 
@@ -202,9 +209,16 @@ class NotesEditor : KeyboardScopedFragment() {
             notesPackageInfo = it
             originalText = SpannableStringBuilder(it.note)
 
-            noteEditText.setText(it.note, TextView.BufferType.SPANNABLE)
-            textViewUndoRedo?.clearHistory()
-            textViewUndoRedo = TextViewUndoRedo(noteEditText)
+            val params = TextViewCompat.getTextMetricsParams(noteEditText)
+
+            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
+                val precomputedText = PrecomputedTextCompat.create(it.note, params)
+                launchOnUiThread {
+                    noteEditText.setText(precomputedText, TextView.BufferType.SPANNABLE)
+                    textViewUndoRedo?.clearHistory()
+                    textViewUndoRedo = TextViewUndoRedo(noteEditText)
+                }
+            }
         }
 
         bold.setOnClickListener {
@@ -277,8 +291,12 @@ class NotesEditor : KeyboardScopedFragment() {
             // Insert today's date
             val selectionStart = noteEditText.selectionStart.coerceAtLeast(0)
             val selectionEnd = noteEditText.selectionEnd.coerceAtLeast(0)
-            noteEditText.text?.replace(selectionStart.coerceAtMost(selectionEnd), selectionStart.coerceAtLeast(selectionEnd),
-                                       DateUtils.getTodayDate(), 0, DateUtils.getTodayDate().length)
+            noteEditText.text?.replace(
+                    selectionStart.coerceAtMost(selectionEnd),
+                    selectionStart.coerceAtLeast(selectionEnd),
+                    DateUtils.getTodayDate(),
+                    0,
+                    DateUtils.getTodayDate().length)
         }
 
         // TODO - There was a unique bug where the bottom menu was not showing up when the user was in the notes editor fragment
@@ -414,7 +432,7 @@ class NotesEditor : KeyboardScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            NotesPreferences.autoSave -> {
+            NotesPreferences.AUTO_SAVE -> {
                 if (!NotesPreferences.isAutoSave()) {
                     save.visible(true)
                 } else {
@@ -438,6 +456,7 @@ class NotesEditor : KeyboardScopedFragment() {
             return fragment
         }
 
+        const val TAG = "notes_editor"
         const val NOTES_UPDATED = "notes_updated"
     }
 }

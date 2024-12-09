@@ -7,10 +7,10 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.Warnings
 import app.simple.inure.extensions.viewmodels.RootShizukuViewModel
-import app.simple.inure.shizuku.Shell.Command
-import app.simple.inure.shizuku.ShizukuUtils
+import app.simple.inure.helpers.ShizukuServiceHelper
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -55,26 +55,8 @@ class UninstallerViewModel(application: Application, val packageInfo: PackageInf
         }
     }
 
-    private fun runShizuku() {
-        viewModelScope.launch(Dispatchers.IO) {
-            kotlin.runCatching {
-                ShizukuUtils.execInternal(Command(formUninstallCommand()), null).let {
-                    Log.d("Shizuku", it.toString())
-                }
-            }.onFailure {
-                success.postValue("Failed")
-                postError(it)
-            }.onSuccess {
-                success.postValue("Done")
-            }.getOrElse {
-                success.postValue("Failed")
-                postError(it)
-            }
-        }
-    }
-
     private fun formUninstallCommand(): String {
-        return if (packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
+        return if (packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
             "pm uninstall --user current ${packageInfo.packageName}"
         } else {
             "pm uninstall ${packageInfo.packageName}"
@@ -90,8 +72,21 @@ class UninstallerViewModel(application: Application, val packageInfo: PackageInf
         success.postValue("Failed")
     }
 
-    override fun onShizukuCreated() {
-        Log.d("Shizuku", "Created")
-        runShizuku()
+    override fun onShizukuCreated(shizukuServiceHelper: ShizukuServiceHelper) {
+        viewModelScope.launch(Dispatchers.IO) {
+            kotlin.runCatching {
+                shizukuServiceHelper.service!!.simpleExecute(formUninstallCommand()).let {
+                    Log.d("Shizuku", it.toString())
+                }
+            }.onFailure {
+                success.postValue("Failed")
+                postError(it)
+            }.onSuccess {
+                success.postValue("Done")
+            }.getOrElse {
+                success.postValue("Failed")
+                postError(it)
+            }
+        }
     }
 }

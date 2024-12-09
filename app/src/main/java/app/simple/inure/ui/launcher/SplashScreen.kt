@@ -3,9 +3,18 @@ package app.simple.inure.ui.launcher
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AppOpsManager
-import android.content.*
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
-import android.os.*
+import android.os.Build
+import android.os.Bundle
+import android.os.Environment
+import android.os.IBinder
+import android.os.Process
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -14,28 +23,46 @@ import android.view.animation.AnimationUtils
 import android.widget.ImageView
 import androidx.core.app.AppOpsManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.viewModels
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import app.simple.inure.BuildConfig
 import app.simple.inure.R
 import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.constants.Warnings
-import app.simple.inure.crash.CrashReporter
+import app.simple.inure.crash.CrashReport
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.LoaderImageView
 import app.simple.inure.extensions.fragments.ScopedFragment
-import app.simple.inure.preferences.*
+import app.simple.inure.preferences.AccessibilityPreferences
+import app.simple.inure.preferences.ApkBrowserPreferences
+import app.simple.inure.preferences.AppearancePreferences
+import app.simple.inure.preferences.BehaviourPreferences
+import app.simple.inure.preferences.ConfigurationPreferences
+import app.simple.inure.preferences.DevelopmentPreferences
+import app.simple.inure.preferences.MainPreferences
+import app.simple.inure.preferences.MusicPreferences
+import app.simple.inure.preferences.SearchPreferences
+import app.simple.inure.preferences.SetupPreferences
+import app.simple.inure.preferences.TrialPreferences
 import app.simple.inure.services.DataLoaderService
 import app.simple.inure.ui.panels.Home
-import app.simple.inure.ui.panels.Trial
 import app.simple.inure.util.AppUtils
 import app.simple.inure.util.ConditionUtils.invert
-import app.simple.inure.util.StatusBarHeight
+import app.simple.inure.util.StringUtils.emptyString
 import app.simple.inure.util.ViewUtils.gone
-import app.simple.inure.viewmodels.launcher.LauncherViewModel
-import app.simple.inure.viewmodels.panels.*
+import app.simple.inure.viewmodels.panels.ApkBrowserViewModel
+import app.simple.inure.viewmodels.panels.AppsViewModel
+import app.simple.inure.viewmodels.panels.BatchViewModel
+import app.simple.inure.viewmodels.panels.BatteryOptimizationViewModel
+import app.simple.inure.viewmodels.panels.BootManagerViewModel
+import app.simple.inure.viewmodels.panels.DebloatViewModel
+import app.simple.inure.viewmodels.panels.HomeViewModel
+import app.simple.inure.viewmodels.panels.NotesViewModel
+import app.simple.inure.viewmodels.panels.SearchViewModel
+import app.simple.inure.viewmodels.panels.TagsViewModel
+import app.simple.inure.viewmodels.panels.UsageStatsViewModel
 import app.simple.inure.viewmodels.viewers.SensorsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -61,8 +88,7 @@ class SplashScreen : ScopedFragment() {
     private var isBatteryOptimizationLoaded = false
     private var isBootManagerLoaded = false
     private var isTagsLoaded = false
-
-    private val launcherViewModel: LauncherViewModel by viewModels()
+    private var isDebloatLoaded = false
 
     private var serviceConnection: ServiceConnection? = null
     private var dataLoaderService: DataLoaderService? = null
@@ -77,6 +103,7 @@ class SplashScreen : ScopedFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         startPostponedEnterTransition()
+        clearSearchStates()
 
         intentFilter.addAction(DataLoaderService.APPS_LOADED)
         intentFilter.addAction(DataLoaderService.UNINSTALLED_APPS_LOADED)
@@ -119,6 +146,10 @@ class SplashScreen : ScopedFragment() {
             loaderImageView.alpha = 0F
         }
 
+        if (AppearancePreferences.isCustomColor()) {
+            icon.imageTintList = AppearancePreferences.getAccentColorStateList()
+        }
+
         // (icon.drawable as AnimatedVectorDrawable).start()
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -127,8 +158,10 @@ class SplashScreen : ScopedFragment() {
             }
 
             // Initialize native crash handler
-            if (DevelopmentPreferences.get(DevelopmentPreferences.crashHandler).invert()) {
-                CrashReporter(requireContext()).initialize()
+            if (DevelopmentPreferences.get(DevelopmentPreferences.CRASH_HANDLER).invert()) {
+                if (BuildConfig.DEBUG.invert()) {
+                    CrashReport(requireContext()).initialize()
+                }
             }
 
             when {
@@ -165,6 +198,10 @@ class SplashScreen : ScopedFragment() {
     }
 
     private fun proceed() {
+        postDelayed(12_000) {
+            showWarning(Warnings.LONG_LOADING_TIME, goBack = false)
+        }
+
         val appsViewModel = ViewModelProvider(requireActivity())[AppsViewModel::class.java]
         val usageStatsData = ViewModelProvider(requireActivity())[UsageStatsViewModel::class.java]
         val sensorsViewModel = ViewModelProvider(requireActivity())[SensorsViewModel::class.java]
@@ -186,6 +223,13 @@ class SplashScreen : ScopedFragment() {
             ViewModelProvider(requireActivity())[BootManagerViewModel::class.java]
         } else {
             isBootManagerLoaded = true
+            null
+        }
+
+        val debloatViewModel = if (ConfigurationPreferences.isUsingRoot() || ConfigurationPreferences.isUsingShizuku()) {
+            ViewModelProvider(requireActivity())[DebloatViewModel::class.java]
+        } else {
+            isDebloatLoaded = true
             null
         }
 
@@ -221,7 +265,7 @@ class SplashScreen : ScopedFragment() {
             openApp()
         }
 
-        searchViewModel.getDeepSearchData().observe(viewLifecycleOwner) {
+        searchViewModel.getSearchData().observe(viewLifecycleOwner) {
             Log.d(TAG, "Deep search data loaded in ${(System.currentTimeMillis() - startTime) / 1000} seconds")
             isSearchLoaded = true
             openApp()
@@ -301,38 +345,29 @@ class SplashScreen : ScopedFragment() {
             Log.d(TAG, "Apk files loaded in ${(System.currentTimeMillis() - startTime) / 1000} seconds")
         }
 
+        debloatViewModel?.getBloatList()?.observe(viewLifecycleOwner) {
+            Log.d(TAG, "Debloat data loaded in ${(System.currentTimeMillis() - startTime) / 1000} seconds")
+            isDebloatLoaded = true
+            openApp()
+        }
+
         if (BehaviourPreferences.isSkipLoading()) {
             openApp()
         }
     }
 
     private fun openApp() {
-        if (isEverythingLoaded() || BehaviourPreferences.isSkipLoading()) {
-            if (MainPreferences.getLaunchCount() % 7 == 0 && StatusBarHeight.isLandscape(requireContext()).invert() && AppUtils.isPlayFlavor()) {
-                if (MainPreferences.isShowRateReminder()) {
-                    requireActivity().supportFragmentManager.beginTransaction()
-                        .setCustomAnimations(R.anim.enter_from_right, R.anim.exit_to_left, R.anim.enter_from_left, R.anim.exit_to_right)
-                        .replace(R.id.app_container, Home.newInstance(), "home")
-                        .commit()
-
-                    requireActivity().supportFragmentManager.executePendingTransactions()
-
-                    openFragmentSlide(Rate.newInstance(), "rate")
-                } else {
-                    if (TrialPreferences.getDaysLeft() != -1) { // Block app launch if shady activity detected
-                        openFragmentArc(Home.newInstance(), icon)
-                    } else {
-                        openFragmentSlide(Trial.newInstance())
-                    }
-                }
-            } else {
-                if (TrialPreferences.getDaysLeft() != -1) { // Block app launch if shady activity detected
-                    openFragmentArc(Home.newInstance(), icon)
-                } else {
-                    openFragmentSlide(Trial.newInstance())
-                }
+        if (BehaviourPreferences.isSkipLoading()) {
+            launchHome()
+        } else {
+            if (isEverythingLoaded()) {
+                launchHome()
             }
         }
+    }
+
+    private fun launchHome() {
+        openFragmentArc(Home.newInstance(), icon)
     }
 
     private fun isEverythingLoaded(): Boolean {
@@ -371,58 +406,43 @@ class SplashScreen : ScopedFragment() {
     }
 
     private fun unlockStateChecker() {
-        launcherViewModel.getHasValidCertificate().observe(viewLifecycleOwner) { it ->
-            if (it) {
-                Log.d(TAG, "Valid certificate found")
-
-                if (TrialPreferences.isFullVersion().invert()) {
-                    kotlin.runCatching {
-                        if (TrialPreferences.setFullVersion(value = true)) {
-                            showWarning(R.string.full_version_activated, goBack = false)
-                            TrialPreferences.resetUnlockerWarningCount()
-                            daysLeft.gone()
-                        }
-                    }.getOrElse {
-                        it.printStackTrace()
-                    }
-                }
-            } else {
-                showWarning(Warnings.getInvalidUnlockerWarning(), goBack = false)
-                TrialPreferences.setFullVersion(false)
-                TrialPreferences.resetUnlockerWarningCount()
-            }
-        }
-
-        if (AppUtils.isBetaFlavor().invert()) {
-            if (TrialPreferences.isTrialWithoutFull()) {
+        when {
+            TrialPreferences.isTrialWithoutFull() -> {
                 if (TrialPreferences.isFullVersion()) {
                     daysLeft.gone()
-                    TrialPreferences.resetUnlockerWarningCount()
                 } else {
                     daysLeft.text = getString(R.string.days_trial_period_remaining, TrialPreferences.getDaysLeft())
-                    TrialPreferences.resetUnlockerWarningCount()
                 }
-            } else if (TrialPreferences.isFullVersion()) {
-                if (requirePackageManager().isPackageInstalled(AppUtils.unlockerPackageName)) {
-                    daysLeft.gone()
-                } else {
-                    if (TrialPreferences.getUnlockerWarningCount() < 3) {
-                        showWarning(R.string.unlocker_not_installed, goBack = false)
-                        TrialPreferences.incrementUnlockerWarningCount()
+            }
+            TrialPreferences.isFullVersion() -> {
+                when {
+                    TrialPreferences.hasLicenceKey() && TrialPreferences.isUnlockerVerificationRequired().invert() -> {
+                        Log.d(TAG, "Licence key mode")
                         daysLeft.gone()
-                    } else {
-                        showWarning(R.string.full_version_deactivated, goBack = false)
-                        TrialPreferences.setFullVersion(false)
-                        TrialPreferences.resetUnlockerWarningCount()
-                        daysLeft.text = getString(R.string.days_trial_period_remaining, TrialPreferences.getDaysLeft())
+                    }
+                    else -> {
+                        if (requirePackageManager().isPackageInstalled(AppUtils.UNLOCKER_PACKAGE_NAME)) {
+                            daysLeft.gone()
+                        } else {
+                            showWarning(R.string.full_version_deactivated, goBack = false)
+                            TrialPreferences.setFullVersion(false)
+                            daysLeft.text = getString(R.string.days_trial_period_remaining, TrialPreferences.getDaysLeft())
+                        }
                     }
                 }
-            } else {
+            }
+            else -> {
                 // Should always be 0
                 daysLeft.text = getString(R.string.days_trial_period_remaining, TrialPreferences.getDaysLeft())
             }
-        } else {
-            daysLeft.gone()
+        }
+    }
+
+    private fun clearSearchStates() {
+        if (DevelopmentPreferences.get(DevelopmentPreferences.CLEAR_SEARCH_STATE)) {
+            SearchPreferences.clearLastSearchKeyword()
+            ApkBrowserPreferences.setSearchKeyword(emptyString())
+            MusicPreferences.setSearchKeyword(emptyString())
         }
     }
 
@@ -434,12 +454,16 @@ class SplashScreen : ScopedFragment() {
     override fun onDestroy() {
         super.onDestroy()
         try {
-            requireContext().unbindService(serviceConnection!!)
+            if (serviceConnection != null) {
+                requireContext().unbindService(serviceConnection!!)
+            }
         } catch (e: java.lang.IllegalArgumentException) {
-            e.printStackTrace()
+            e.printStackTrace() // Should crash if moving to another [Setup] fragment
         }
 
-        LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(broadcastReceiver!!)
+        if (broadcastReceiver != null) {
+            LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(broadcastReceiver!!)
+        }
     }
 
     companion object {
@@ -451,6 +475,6 @@ class SplashScreen : ScopedFragment() {
             return fragment
         }
 
-        private const val TAG = "Splash Screen"
+        const val TAG = "Splash Screen"
     }
 }

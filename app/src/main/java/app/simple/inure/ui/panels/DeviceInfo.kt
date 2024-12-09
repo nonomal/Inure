@@ -8,6 +8,7 @@ import androidx.core.view.doOnPreDraw
 import androidx.fragment.app.viewModels
 import app.simple.inure.R
 import app.simple.inure.adapters.ui.AdapterDeviceInfo
+import app.simple.inure.constants.BottomMenuConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.extensions.fragments.ScopedFragment
 import app.simple.inure.ui.deviceinfo.BatteryInfo
@@ -44,26 +45,18 @@ class DeviceInfo : ScopedFragment() {
                 override fun onItemClicked(source: String, icon: View) {
                     when (source) {
                         getString(R.string.system) -> {
-                            openFragmentLinear(SystemInfo.newInstance(), icon, "system_info")
+                            openFragmentLinear(SystemInfo.newInstance(), icon, SystemInfo.TAG)
                         }
                         getString(R.string.device) -> {
-                            openFragmentLinear(DeviceInfo.newInstance(), icon, "device_info")
+                            openFragmentLinear(DeviceInfo.newInstance(), icon, DeviceInfo.TAG)
                         }
                         getString(R.string.battery) -> {
-                            openFragmentLinear(BatteryInfo.newInstance(), icon, "battery_info")
+                            openFragmentLinear(BatteryInfo.newInstance(), icon, BatteryInfo.TAG)
                         }
                         getString(R.string.sensors) -> {
-                            openFragmentLinear(Sensors.newInstance(), icon, "sensors")
+                            openFragmentLinear(Sensors.newInstance(), icon, Sensors.TAG)
                         }
                     }
-                }
-
-                override fun onSearchClicked() {
-                    openFragmentSlide(Search.newInstance(true), "search")
-                }
-
-                override fun onSettingsClicked() {
-                    openFragmentSlide(Preferences.newInstance(), "prefs_screen")
                 }
             })
 
@@ -71,6 +64,17 @@ class DeviceInfo : ScopedFragment() {
 
             (view.parent as? ViewGroup)?.doOnPreDraw {
                 startPostponedEnterTransition()
+            }
+
+            bottomRightCornerMenu?.initBottomMenuWithRecyclerView(BottomMenuConstants.getGenericBottomMenuItems(), panels) { id, _ ->
+                when (id) {
+                    R.drawable.ic_search -> {
+                        openFragmentSlide(Search.newInstance(true), Search.TAG)
+                    }
+                    R.drawable.ic_settings -> {
+                        openFragmentSlide(Preferences.newInstance(), Preferences.TAG)
+                    }
+                }
             }
         }
     }
@@ -82,5 +86,7 @@ class DeviceInfo : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "DeviceInfo"
     }
 }

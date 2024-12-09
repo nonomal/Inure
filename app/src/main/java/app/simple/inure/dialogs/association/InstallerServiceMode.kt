@@ -1,7 +1,12 @@
 package app.simple.inure.dialogs.association
 
 import android.app.Service
-import android.content.*
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
@@ -10,6 +15,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import app.simple.inure.R
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.constants.ServiceConstants
 import app.simple.inure.decorations.ripple.DynamicRippleTextView
@@ -20,6 +26,9 @@ import app.simple.inure.services.BatchExtractService
 import app.simple.inure.services.InstallerService
 import app.simple.inure.util.ParcelUtils.parcelable
 
+/**
+ * What is this used for??? 🤔🤔
+ */
 class InstallerServiceMode : ScopedBottomSheetFragment() {
 
     private var installerService: InstallerService? = null
@@ -58,8 +67,8 @@ class InstallerServiceMode : ScopedBottomSheetFragment() {
                 when (intent?.action) {
                     ServiceConstants.actionPackageInfo -> {
                         packageInfo = intent.extras?.parcelable(BundleConstants.packageInfo)!!
-                        icon.setImageDrawable(packageInfo.applicationInfo.loadIcon(requireContext().packageManager))
-                        name.text = packageInfo.applicationInfo.loadLabel(requireContext().packageManager)
+                        icon.setImageDrawable(packageInfo.safeApplicationInfo.loadIcon(requireContext().packageManager))
+                        name.text = packageInfo.safeApplicationInfo.loadLabel(requireContext().packageManager)
                         packageName.text = buildString {
                             append(packageInfo.packageName)
                             append("(${packageInfo.versionName})")

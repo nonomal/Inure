@@ -12,6 +12,7 @@ import app.simple.inure.extensions.fragments.ScopedBottomSheetFragment
 import app.simple.inure.interfaces.dialog.GeneratedDataCallbacks
 import app.simple.inure.popups.app.PopupGeneratedDataFormat
 import app.simple.inure.preferences.GeneratedDataPreferences
+import app.simple.inure.util.AppUtils
 import app.simple.inure.util.FlagUtils
 import com.google.android.material.chip.ChipGroup
 
@@ -45,6 +46,11 @@ class GenerateAppData : ScopedBottomSheetFragment() {
         setFlags()
         setDataFormat()
         generateButtonState()
+
+        if (AppUtils.isPlayFlavor()) {
+            linkChipGroup.removeView(linkChipGroup.findViewById(R.id.fdroid))
+            linkChipGroup.removeView(linkChipGroup.findViewById(R.id.izzyondroid))
+        }
 
         requiredChipGroup.setOnCheckedStateChangeListener { _, checkedIds ->
             var sourceFlags = GeneratedDataPreferences.getGeneratorFlags()
@@ -115,28 +121,21 @@ class GenerateAppData : ScopedBottomSheetFragment() {
                 FlagUtils.unsetFlag(sourceFlags, GeneratedDataPreferences.PLAY_STORE)
             }
 
-            sourceFlags = if (checkedIds.contains(R.id.fdroid)) {
-                FlagUtils.setFlag(sourceFlags, GeneratedDataPreferences.FDROID)
-            } else {
-                FlagUtils.unsetFlag(sourceFlags, GeneratedDataPreferences.FDROID)
-            }
+            if (AppUtils.isGithubFlavor() || AppUtils.isBetaFlavor()) {
+                sourceFlags = if (checkedIds.contains(R.id.fdroid)) {
+                    FlagUtils.setFlag(sourceFlags, GeneratedDataPreferences.FDROID)
+                } else {
+                    FlagUtils.unsetFlag(sourceFlags, GeneratedDataPreferences.FDROID)
+                }
 
-            sourceFlags = if (checkedIds.contains(R.id.izzyondroid)) {
-                FlagUtils.setFlag(sourceFlags, GeneratedDataPreferences.IZZYONDROID)
+                sourceFlags = if (checkedIds.contains(R.id.izzyondroid)) {
+                    FlagUtils.setFlag(sourceFlags, GeneratedDataPreferences.IZZYONDROID)
+                } else {
+                    FlagUtils.unsetFlag(sourceFlags, GeneratedDataPreferences.IZZYONDROID)
+                }
             } else {
                 FlagUtils.unsetFlag(sourceFlags, GeneratedDataPreferences.IZZYONDROID)
-            }
-
-            sourceFlags = if (checkedIds.contains(R.id.amazon)) {
-                FlagUtils.setFlag(sourceFlags, GeneratedDataPreferences.AMAZON_STORE)
-            } else {
-                FlagUtils.unsetFlag(sourceFlags, GeneratedDataPreferences.AMAZON_STORE)
-            }
-
-            sourceFlags = if (checkedIds.contains(R.id.galaxy_store)) {
-                FlagUtils.setFlag(sourceFlags, GeneratedDataPreferences.GALAXY_STORE)
-            } else {
-                FlagUtils.unsetFlag(sourceFlags, GeneratedDataPreferences.GALAXY_STORE)
+                FlagUtils.unsetFlag(sourceFlags, GeneratedDataPreferences.FDROID)
             }
 
             GeneratedDataPreferences.setGeneratorFlags(sourceFlags)
@@ -199,14 +198,6 @@ class GenerateAppData : ScopedBottomSheetFragment() {
             linkChipGroup.check(R.id.fdroid)
         }
 
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE)) {
-            linkChipGroup.check(R.id.amazon)
-        }
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE)) {
-            linkChipGroup.check(R.id.galaxy_store)
-        }
-
         if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID)) {
             linkChipGroup.check(R.id.izzyondroid)
         }
@@ -253,7 +244,7 @@ class GenerateAppData : ScopedBottomSheetFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            GeneratedDataPreferences.generatedDataType -> {
+            GeneratedDataPreferences.GENERATED_DATA_TYPE -> {
                 setDataFormat()
             }
         }
@@ -265,9 +256,11 @@ class GenerateAppData : ScopedBottomSheetFragment() {
         }
 
         fun FragmentManager.showGeneratedDataTypeSelector(): GenerateAppData {
-            val fragment = newInstance()
-            fragment.show(this, "generated_data_type")
-            return fragment
+            val dialog = newInstance()
+            dialog.show(this, TAG)
+            return dialog
         }
+
+        const val TAG = "generated_data_type"
     }
 }

@@ -10,7 +10,7 @@ import android.view.ViewGroup
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterBoot
+import app.simple.inure.adapters.viewers.AdapterBoot
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.extensions.fragments.SearchBarScopedFragment
@@ -33,7 +33,7 @@ class Boot : SearchBarScopedFragment() {
         recyclerView = view.findViewById(R.id.receivers_recycler_view)
         search = view.findViewById(R.id.receivers_search_btn)
         searchBox = view.findViewById(R.id.receivers_search)
-        title = view.findViewById(R.id.receivers_title)
+        title = view.findViewById(R.id.boot_title)
 
         val packageInfoFactory = PackageInfoFactory(packageInfo)
         bootViewModel = ViewModelProvider(this, packageInfoFactory)[BootViewModel::class.java]
@@ -47,8 +47,9 @@ class Boot : SearchBarScopedFragment() {
         fullVersionCheck()
         searchBoxState(false, BootPreferences.isSearchVisible())
 
-        bootViewModel?.getBootData()?.observe(viewLifecycleOwner) { it ->
+        bootViewModel?.getBootData()?.observe(viewLifecycleOwner) {
             adapterBoot = AdapterBoot(it, keyword = searchBox.text.toString().trim())
+            setCount(it.size)
 
             adapterBoot!!.setBootCallbacks(object : AdapterBoot.Companion.BootCallbacks {
                 override fun onBootClicked(resolveInfo: ResolveInfo, checked: Boolean) {
@@ -97,7 +98,7 @@ class Boot : SearchBarScopedFragment() {
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         super.onSharedPreferenceChanged(sharedPreferences, key)
         when (key) {
-            BootPreferences.isSearchVisible -> {
+            BootPreferences.IS_SEARCH_VISIBLE -> {
                 searchBoxState(false, BootPreferences.isSearchVisible())
             }
         }
@@ -111,5 +112,7 @@ class Boot : SearchBarScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "Boot"
     }
 }

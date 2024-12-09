@@ -14,6 +14,7 @@ import app.simple.inure.preferences.DevelopmentPreferences
 import app.simple.inure.themes.data.MaterialYou
 import app.simple.inure.util.CalendarUtils
 
+@Suppress("unused")
 object ThemeUtils {
     fun setAppTheme(resources: Resources) {
         when (AppearancePreferences.getTheme()) {
@@ -174,6 +175,14 @@ object ThemeUtils {
         }
     }
 
+    fun manualBarColors(light: Boolean, window: Window) {
+        if (light) {
+            lightBars(window)
+        } else {
+            darkBars(window)
+        }
+    }
+
     private fun lightBars(window: Window) {
         setStatusAndNavColors(window)
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
@@ -187,7 +196,7 @@ object ThemeUtils {
     }
 
     private fun setStatusAndNavColors(window: Window) {
-        if (DevelopmentPreferences.get(DevelopmentPreferences.disableTransparentStatus)) {
+        if (DevelopmentPreferences.get(DevelopmentPreferences.DISABLE_TRANSPARENT_STATUS)) {
             window.statusBarColor = ThemeManager.theme.viewGroupTheme.background
         } else {
             window.statusBarColor = Color.TRANSPARENT
@@ -337,7 +346,7 @@ object ThemeUtils {
             ContextCompat.getColor(baseContext, R.color.limed_spruce) -> {
                 setTheme(R.style.LimedSpruce)
             }
-            ContextCompat.getColor(baseContext, MaterialYou.materialYouAccentResID) -> {
+            ContextCompat.getColor(baseContext, MaterialYou.MATERIAL_YOU_ACCENT_RES_ID) -> {
                 setTheme(R.style.MaterialYou)
             }
             else -> {
@@ -438,7 +447,7 @@ object ThemeUtils {
             ContextCompat.getColor(baseContext, R.color.limed_spruce) -> {
                 setTheme(R.style.LimedSpruce_Transparent)
             }
-            ContextCompat.getColor(baseContext, MaterialYou.materialYouAccentResID) -> {
+            ContextCompat.getColor(baseContext, MaterialYou.MATERIAL_YOU_ACCENT_RES_ID) -> {
                 setTheme(R.style.MaterialYou_Transparent)
             }
             else -> {

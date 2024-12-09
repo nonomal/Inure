@@ -37,7 +37,7 @@
                     android:text="@string/external_storage"
                     android:textSize="@dimen/info_text_small"
                     app:appFontStyle="bold"
-                    app:drawableEndCompat="@drawable/ic_warning_tiny"
+                    app:drawableEndCompat="@drawable/ic_warning_12dp"
                     app:drawableTintStyle="warning"
                     app:textColorStyle="primary" />
 
@@ -53,9 +53,9 @@
 
             </LinearLayout>
 
-            <app.simple.inure.decorations.switchview.SwitchView
+            <app.simple.inure.decorations.toggles.Switch
                 android:id="@+id/external_storage_switch"
-                android:layout_width="@dimen/switch_width"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
                 android:layout_marginEnd="@dimen/dialog_padding" />
@@ -82,7 +82,7 @@
                     android:text="@string/load_split_apk_icon"
                     android:textSize="@dimen/info_text_small"
                     app:appFontStyle="bold"
-                    app:drawableEndCompat="@drawable/ic_warning_tiny"
+                    app:drawableEndCompat="@drawable/ic_warning_12dp"
                     app:drawableTintStyle="warning"
                     app:textColorStyle="primary" />
 
@@ -98,9 +98,9 @@
 
             </LinearLayout>
 
-            <app.simple.inure.decorations.switchview.SwitchView
+            <app.simple.inure.decorations.toggles.Switch
                 android:id="@+id/load_split_icon"
-                android:layout_width="@dimen/switch_width"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
                 android:layout_marginEnd="@dimen/dialog_padding" />

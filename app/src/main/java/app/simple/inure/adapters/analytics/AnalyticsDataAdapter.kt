@@ -6,13 +6,15 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
+import app.simple.inure.decorations.condensed.CondensedDynamicRippleConstraintLayout
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
-import app.simple.inure.decorations.ripple.DynamicRippleConstraintLayout
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.AppIconImageView
 import app.simple.inure.glide.util.ImageLoader.loadAppIcon
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
-import app.simple.inure.util.PackageListUtils.setAppInfo
+import app.simple.inure.util.AdapterUtils.setAppVisualStates
+import app.simple.inure.util.InfoStripUtils.setAppInfo
 
 class AnalyticsDataAdapter(private val packageInfo: ArrayList<PackageInfo>) : RecyclerView.Adapter<AnalyticsDataAdapter.Holder>() {
 
@@ -24,8 +26,9 @@ class AnalyticsDataAdapter(private val packageInfo: ArrayList<PackageInfo>) : Re
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         holder.icon.transitionName = packageInfo[position].packageName
-        holder.icon.loadAppIcon(packageInfo[position].packageName, packageInfo[position].applicationInfo.enabled)
-        holder.name.text = packageInfo[position].applicationInfo.name
+        holder.icon.loadAppIcon(packageInfo[position].packageName, packageInfo[position].safeApplicationInfo.enabled)
+        holder.name.text = packageInfo[position].safeApplicationInfo.name
+        holder.name.setAppVisualStates(packageInfo[position])
         holder.packageName.text = packageInfo[position].packageName
         holder.details.setAppInfo(packageInfo[position])
 
@@ -62,6 +65,6 @@ class AnalyticsDataAdapter(private val packageInfo: ArrayList<PackageInfo>) : Re
         val name: TypeFaceTextView = itemView.findViewById(R.id.name)
         val packageName: TypeFaceTextView = itemView.findViewById(R.id.package_id)
         val details: TypeFaceTextView = itemView.findViewById(R.id.details)
-        val container: DynamicRippleConstraintLayout = itemView.findViewById(R.id.container)
+        val container: CondensedDynamicRippleConstraintLayout = itemView.findViewById(R.id.container)
     }
 }

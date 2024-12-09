@@ -9,8 +9,10 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.core.view.postDelayed
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
+import app.simple.inure.interfaces.fragments.WebviewCallbacks
 import app.simple.inure.preferences.AppearancePreferences
 import app.simple.inure.themes.manager.ThemeUtils
 import app.simple.inure.util.ColorUtils.toHexColor
@@ -21,6 +23,7 @@ import app.simple.inure.util.ViewUtils.visible
 open class CustomWebView(context: Context, attributeSet: AttributeSet) : WebView(context, attributeSet) {
 
     private val color: String
+    private var webviewCallbacks: WebviewCallbacks? = null
 
     init {
         settings.allowContentAccess = true
@@ -32,6 +35,7 @@ open class CustomWebView(context: Context, attributeSet: AttributeSet) : WebView
         invisible(animate = false)
 
         // TODO - Calling non-final function setBackgroundColor in constructor
+        @Suppress("LeakingThis")
         setBackgroundColor(0)
 
         color = AppearancePreferences.getAccentColor().toHexColor()
@@ -60,19 +64,31 @@ open class CustomWebView(context: Context, attributeSet: AttributeSet) : WebView
                 if (ThemeUtils.isNightMode(resources)) {
                     view.evaluateJavascript("CssLoader.loadDarkCss()") {
                         view.loadUrl("javascript:document.body.style.setProperty(\"color\", \"$color\");")
-                        visible(animate = false)
+                        post {
+                            webviewCallbacks?.onPageLoadFinished()
+                        }
+
+                        postDelayed(DELAY) {
+                            visible(animate = false)
+                        }
                     }
                 } else {
                     view.evaluateJavascript("CssLoader.loadLightCss()") {
                         view.loadUrl("javascript:document.body.style.setProperty(\"color\", \"$color\");")
-                        visible(animate = false)
+                        post {
+                            webviewCallbacks?.onPageLoadFinished()
+                        }
+
+                        postDelayed(DELAY) {
+                            visible(animate = false)
+                        }
                     }
                 }
             }
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val url = request.url.toString()
-                if (url.contains("assets/")) {
+                if (url.contains("asset/")) {
                     view.loadUrl(url)
                 } else {
                     val intent = Intent(Intent.ACTION_VIEW, request.url)
@@ -81,5 +97,14 @@ open class CustomWebView(context: Context, attributeSet: AttributeSet) : WebView
                 return true
             }
         }
+    }
+
+    fun setOnPageFinishedListener(webviewCallbacks: WebviewCallbacks) {
+        this.webviewCallbacks = webviewCallbacks
+    }
+
+    companion object {
+        private const val TAG = "CustomWebView"
+        private const val DELAY = 300L
     }
 }

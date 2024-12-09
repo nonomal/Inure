@@ -9,8 +9,8 @@ import java.io.File
 
 object SharedPreferences {
 
-    private const val preferences = "Preferences"
-    private const val preferencesEncrypted = "PreferencesSecured"
+    private const val PREFERENCES = "Preferences"
+    private const val PREFERENCES_ENCRYPTED = "PreferencesSecured"
     private var sharedPreferences: SharedPreferences? = null
     private var encryptedSharedPreferences: SharedPreferences? = null
 
@@ -18,7 +18,7 @@ object SharedPreferences {
 
     fun init(context: Context) {
         if (sharedPreferences.isNull()) {
-            sharedPreferences = context.getSharedPreferences(preferences, Context.MODE_PRIVATE)
+            sharedPreferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
         }
     }
 
@@ -35,7 +35,7 @@ object SharedPreferences {
 
                 encryptedSharedPreferences = EncryptedSharedPreferences.create(
                         context,
-                        preferencesEncrypted,
+                        PREFERENCES_ENCRYPTED,
                         masterKeyAlias,
                         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
@@ -47,8 +47,7 @@ object SharedPreferences {
             if (isInitialized.not()) {
                 // Delete the encrypted shared preferences if it fails to initialize
                 File(getEncryptedSharedPreferencesPath(context)).delete()
-
-                init(context)
+                initEncrypted(context)
                 isInitialized = true
             }
         }
@@ -62,6 +61,11 @@ object SharedPreferences {
      * @throws NullPointerException
      */
     fun getSharedPreferences(): SharedPreferences {
+        return sharedPreferences ?: throw NullPointerException()
+    }
+
+    fun getSharedPreference(context: Context): SharedPreferences {
+        init(context)
         return sharedPreferences ?: throw NullPointerException()
     }
 
@@ -95,6 +99,14 @@ object SharedPreferences {
         unregisterListener(this)
     }
 
+    fun registerEncryptedSharedPreferencesListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        getEncryptedSharedPreferences().registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun unregisterEncryptedSharedPreferencesListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        getEncryptedSharedPreferences().unregisterOnSharedPreferenceChangeListener(listener)
+    }
+
     /**
      * Singleton to hold reference of SharedPreference.
      *
@@ -110,10 +122,10 @@ object SharedPreferences {
     }
 
     fun getSharedPreferencesPath(context: Context): String {
-        return context.applicationInfo.dataDir + "/shared_prefs/" + preferences + ".xml"
+        return context.applicationInfo.dataDir + "/shared_prefs/" + PREFERENCES + ".xml"
     }
 
     fun getEncryptedSharedPreferencesPath(context: Context): String {
-        return context.applicationInfo.dataDir + "/shared_prefs/" + preferencesEncrypted + ".xml"
+        return context.applicationInfo.dataDir + "/shared_prefs/" + PREFERENCES_ENCRYPTED + ".xml"
     }
 }

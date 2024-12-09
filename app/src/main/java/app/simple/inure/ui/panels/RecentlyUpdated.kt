@@ -13,7 +13,7 @@ import app.simple.inure.adapters.home.AdapterRecentlyUpdated
 import app.simple.inure.constants.BottomMenuConstants
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
-import app.simple.inure.dialogs.menus.AppsMenu
+import app.simple.inure.dialogs.app.AppMenu
 import app.simple.inure.extensions.fragments.ScopedFragment
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
 import app.simple.inure.viewmodels.panels.HomeViewModel
@@ -39,7 +39,9 @@ class RecentlyUpdated : ScopedFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        showLoader()
+        if (homeViewModel.shouldShowRecentlyUpdatedLoader()) {
+            showLoader(manualOverride = true)
+        }
 
         homeViewModel.getRecentlyUpdated().observe(viewLifecycleOwner) {
             postponeEnterTransition()
@@ -58,18 +60,18 @@ class RecentlyUpdated : ScopedFragment() {
                 }
 
                 override fun onAppLongPressed(packageInfo: PackageInfo, icon: ImageView) {
-                    AppsMenu.newInstance(packageInfo)
-                        .show(childFragmentManager, "apps_menu")
+                    AppMenu.newInstance(packageInfo)
+                        .show(childFragmentManager, AppMenu.TAG)
                 }
             })
 
             bottomRightCornerMenu?.initBottomMenuWithRecyclerView(BottomMenuConstants.getGenericBottomMenuItems(), recyclerView) { id, _ ->
                 when (id) {
                     R.drawable.ic_search -> {
-                        openFragmentSlide(Search.newInstance(true), "search")
+                        openFragmentSlide(Search.newInstance(true), Search.TAG)
                     }
                     R.drawable.ic_settings -> {
-                        openFragmentSlide(Preferences.newInstance(), "prefs_screen")
+                        openFragmentSlide(Preferences.newInstance(), Preferences.TAG)
                     }
                     R.drawable.ic_refresh -> {
                         showLoader(manualOverride = true)
@@ -88,5 +90,7 @@ class RecentlyUpdated : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "recently_updated"
     }
 }

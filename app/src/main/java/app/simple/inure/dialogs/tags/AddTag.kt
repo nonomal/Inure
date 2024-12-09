@@ -3,13 +3,14 @@ package app.simple.inure.dialogs.tags
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
+import android.text.InputFilter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterTags
+import app.simple.inure.adapters.viewers.AdapterTags
 import app.simple.inure.decorations.corners.DynamicCornerEditText
 import app.simple.inure.decorations.ripple.DynamicRippleTextView
 import app.simple.inure.decorations.typeface.TypeFaceTextView
@@ -31,6 +32,7 @@ class AddTag : ScopedDialogFragment() {
 
     private var tagsViewModel: TagsViewModel? = null
     private var adapterTags: AdapterTags? = null
+    private var inputFilter: InputFilter? = null
 
     var onTag: ((String) -> Unit)? = null
 
@@ -51,13 +53,24 @@ class AddTag : ScopedDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        inputFilter = InputFilter { source, _, _, _, _, _ ->
+            val string = source.toString()
+            if (string.trim().matches(Regex("[\\p{L}\\d_.-]+"))) {
+                source.trim()
+            } else {
+                ""
+            }
+        }
+
+        editText.filters = arrayOf(inputFilter)
+
         if (editText.text?.isEmpty() == true) {
             add.gone()
-            this.count.text = String.format("%d/30", 0)
+            this.count.text = String.format("%d/${resources.getInteger(R.integer.tag_character_limit)}", 0)
             count.setTextColor(ColorStateList.valueOf(Color.RED))
         } else {
             add.visible(animate = false)
-            this.count.text = String.format("%d/30", editText.text!!.length)
+            this.count.text = String.format("%d/${resources.getInteger(R.integer.tag_character_limit)}", editText.text!!.length)
             if (editText.text!!.length > 2) {
                 count.setTextColor(ColorStateList.valueOf(
                         ThemeManager.theme.textViewTheme.secondaryTextColor))
@@ -71,8 +84,10 @@ class AddTag : ScopedDialogFragment() {
             adapterTags = AdapterTags(it, false).apply {
                 setOnTagCallbackListener(object : AdapterTags.Companion.TagsCallback {
                     override fun onTagClicked(tag: String) {
-                        editText.setText(tag)
-                        editText.setSelection(tag.length)
+                        if (tag.isNotEmpty()) {
+                            editText.setText(tag)
+                            editText.setSelection(tag.length)
+                        }
                     }
 
                     override fun onTagLongClicked(tag: String) {
@@ -96,7 +111,7 @@ class AddTag : ScopedDialogFragment() {
         }
 
         editText.doOnTextChanged { text, _, _, _ ->
-            count.text = String.format("%d/30", text!!.length)
+            count.text = String.format("%d/${resources.getInteger(R.integer.tag_character_limit)}", text!!.length)
             if (text.isNotEmpty()) {
                 if (text.length > 2) {
                     adapterTags?.highlightedTag = text.toString()
@@ -109,6 +124,7 @@ class AddTag : ScopedDialogFragment() {
                 }
             } else {
                 add.gone(animate = false)
+                count.setTextColor(ColorStateList.valueOf(Color.RED))
             }
         }
 

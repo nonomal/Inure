@@ -1,11 +1,17 @@
 package app.simple.inure.adapters.menus
 
+import android.annotation.SuppressLint
+import android.content.SharedPreferences
+import android.content.SharedPreferences.OnSharedPreferenceChangeListener
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
+import app.simple.inure.constants.Colors
 import app.simple.inure.decorations.overscroll.HorizontalListViewHolder
 import app.simple.inure.decorations.ripple.DynamicRippleImageButton
 import app.simple.inure.decorations.ripple.DynamicRippleLinearLayoutWithFactor
@@ -13,9 +19,14 @@ import app.simple.inure.decorations.theme.ThemeIcon
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.interfaces.menus.BottomMenuCallbacks
 import app.simple.inure.preferences.AccessibilityPreferences
+import app.simple.inure.preferences.AppearancePreferences
+import app.simple.inure.preferences.MainPreferences
+import app.simple.inure.preferences.SharedPreferences.registerSharedPreferenceChangeListener
+import app.simple.inure.preferences.SharedPreferences.unregisterSharedPreferenceChangeListener
 import app.simple.inure.util.RecyclerViewUtils
 
-class AdapterBottomMenu(private val bottomMenuItems: ArrayList<Pair<Int, Int>>) : RecyclerView.Adapter<HorizontalListViewHolder>() {
+class AdapterBottomMenu(private val bottomMenuItems: ArrayList<Pair<Int, Int>>) :
+        RecyclerView.Adapter<HorizontalListViewHolder>(), OnSharedPreferenceChangeListener {
 
     private var bottomMenuCallbacks: BottomMenuCallbacks? = null
     private val isBottomMenuContext = AccessibilityPreferences.isAppElementsContext()
@@ -46,6 +57,25 @@ class AdapterBottomMenu(private val bottomMenuItems: ArrayList<Pair<Int, Int>>) 
             holder.button.setOnClickListener {
                 bottomMenuCallbacks?.onBottomMenuItemClicked(bottomMenuItems[position].first, it)
             }
+
+            // We don't need else condition here since it's going to be same for all elements
+            if (AppearancePreferences.isAccentColorOnBottomMenu()) {
+                holder.button.setRippleColor(RIPPLE_COLOR)
+            }
+
+            when {
+                AppearancePreferences.isAccentColorOnBottomMenu() -> {
+                    holder.button.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                }
+                AccessibilityPreferences.isColorfulIcons() -> {
+                    holder.button.imageTintList = ColorStateList(arrayOf(intArrayOf(
+                            android.R.attr.state_enabled
+                    ), intArrayOf()), intArrayOf(
+                            Colors.getColors()[position],
+                            Colors.getColors()[position]
+                    ))
+                }
+            }
         } else if (holder is HolderContext) {
             holder.button.setImageResource(bottomMenuItems[position].first)
             holder.button.contentDescription = holder.itemView.context.getString(bottomMenuItems[position].second)
@@ -53,6 +83,26 @@ class AdapterBottomMenu(private val bottomMenuItems: ArrayList<Pair<Int, Int>>) 
 
             holder.container.setOnClickListener {
                 bottomMenuCallbacks?.onBottomMenuItemClicked(bottomMenuItems[position].first, it)
+            }
+
+            // // We don't need else condition here since it's going to be same for all elements
+            if (AppearancePreferences.isAccentColorOnBottomMenu()) {
+                holder.container.setRippleColor(RIPPLE_COLOR)
+            }
+
+            when {
+                AppearancePreferences.isAccentColorOnBottomMenu() -> {
+                    holder.button.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                    holder.text.setTextColor(Color.WHITE)
+                }
+                AccessibilityPreferences.isColorfulIcons() -> {
+                    holder.button.imageTintList = ColorStateList(arrayOf(intArrayOf(
+                            android.R.attr.state_enabled
+                    ), intArrayOf()), intArrayOf(
+                            Colors.getColors()[position],
+                            Colors.getColors()[position]
+                    ))
+                }
             }
         }
     }
@@ -81,6 +131,7 @@ class AdapterBottomMenu(private val bottomMenuItems: ArrayList<Pair<Int, Int>>) 
         return bottomMenuItems
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     fun updateMenu(bottomMenuItems: ArrayList<Pair<Int, Int>>) {
         Log.d("AdapterBottomMenu", "updateMenu: $bottomMenuItems")
         this.bottomMenuItems.clear()
@@ -98,5 +149,37 @@ class AdapterBottomMenu(private val bottomMenuItems: ArrayList<Pair<Int, Int>>) 
         val container: DynamicRippleLinearLayoutWithFactor = itemView.findViewById(R.id.container)
     }
 
-    inner class Divider(parent: View) : HorizontalListViewHolder(parent)
+    inner class Divider(parent: View) : HorizontalListViewHolder(parent) {
+        val divider: View = parent.findViewById(R.id.divider)
+
+        init {
+            val layoutParams = divider.layoutParams
+            layoutParams.height = MainPreferences.getBottomMenuHeight()
+            divider.layoutParams = layoutParams
+        }
+    }
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        super.onAttachedToRecyclerView(recyclerView)
+        registerSharedPreferenceChangeListener()
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        super.onDetachedFromRecyclerView(recyclerView)
+        unregisterSharedPreferenceChangeListener()
+    }
+
+    companion object {
+        private const val RIPPLE_COLOR = 0x80FFFFFF.toInt()
+    }
+
+    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+        if (key == MainPreferences.BOTTOM_MENU_HEIGHT) {
+            for (i in 0 until itemCount) {
+                if (getItemViewType(i) == RecyclerViewUtils.TYPE_DIVIDER) {
+                    notifyItemChanged(i)
+                }
+            }
+        }
+    }
 }

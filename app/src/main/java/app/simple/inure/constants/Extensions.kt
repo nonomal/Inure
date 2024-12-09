@@ -2,10 +2,38 @@ package app.simple.inure.constants
 
 object Extensions {
 
+    const val TTF = ".ttf"
+    const val HTML = ".html"
+    const val JAVA = ".java"
+    const val KOTLIN = ".kt"
+    const val XML = ".xml"
+    const val MD = ".md"
+    const val JSON = ".json"
+    const val JS = ".js"
+    const val CSS = ".css"
+    const val PROTO = ".proto"
+    const val MP3 = ".mp3"
+    const val WAV = ".wav"
+    const val OGG = ".ogg"
+    const val KTS = ".kts"
+
+    private val extrasExtensions = hashMapOf(
+            "ttf" to true,
+            "html" to true,
+            "java" to true,
+            "kt" to true,
+            "md" to true,
+            "json" to true,
+            "js" to true,
+            "css" to true,
+            "kts" to true,
+            "txt" to true,
+    )
+
     /**
      * List of all the image extensions
      */
-    val imageExtensions = hashMapOf(
+    private val imageExtensions = hashMapOf(
             "jpg" to true,
             "jpeg" to true,
             "png" to true,
@@ -242,4 +270,12 @@ object Extensions {
             "ttf" to "#40C4FF",
             "otf" to "#18FFFF",
     )
+
+    fun String.isImageFile(): Boolean {
+        return imageExtensions.contains(this.substring(this.lastIndexOf(".") + 1))
+    }
+
+    fun String.isExtrasFile(): Boolean {
+        return extrasExtensions.containsKey(this.substring(this.lastIndexOf(".") + 1))
+    }
 }

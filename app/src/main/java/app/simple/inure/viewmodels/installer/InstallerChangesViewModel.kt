@@ -4,11 +4,11 @@ import android.app.Application
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.R
-import app.simple.inure.apk.utils.PackageUtils.getPackageArchiveInfo
-import app.simple.inure.apk.utils.PackageUtils.getPackageInfo
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.WrappedViewModel
 import app.simple.inure.models.Triple
 import app.simple.inure.util.FileUtils.toFile
@@ -52,7 +52,7 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
 
     private fun loadChangesData() {
         viewModelScope.launch(Dispatchers.IO) {
-            packageInfo = packageManager.getPackageArchiveInfo(file)
+            packageInfo = packageManager.getPackageArchiveInfo(file.absolutePath, flags)
 
             if (packageInfo == null) {
                 postWarning("Failed to get package info")
@@ -60,9 +60,10 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
             }
 
             oldPackageInfo = try {
-                applicationContext().packageManager.getPackageInfo(packageInfo!!.packageName)
+                applicationContext().packageManager.getPackageInfo(packageInfo!!.packageName, flags)
             } catch (e: Exception) {
-                null
+                Log.e(TAG, "Failed to get old package info", e)
+                PackageInfo()
             }
 
             val list = arrayListOf<Triple<String, String, String>>()
@@ -72,7 +73,6 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
             list.add(getServicesChanges())
             list.add(getReceiversChanges())
             list.add(getProvidersChanges())
-            // list.add(getNativeLibrariesChanges())
             list.add(getFeaturesChanges())
 
             changes.postValue(list)
@@ -95,6 +95,8 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
             oldPackageInfo!!.requestedPermissions?.let {
                 oldPermissions.addAll(it)
             }
+        }.onFailure {
+            Log.e(TAG, "Failed to get permissions", it)
         }
 
         added = buildString {
@@ -141,13 +143,15 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
         val oldActivities = arrayListOf<String>()
 
         kotlin.runCatching {
-            packageInfo!!.activities?.let {
+            packageInfo!!.activities!!.let {
                 activities.addAll(it.map { activity -> activity.name })
             }
 
-            oldPackageInfo!!.activities?.let {
+            oldPackageInfo!!.activities!!.let {
                 oldActivities.addAll(it.map { activity -> activity.name })
             }
+        }.onFailure {
+            Log.e(TAG, "Failed to get activities", it)
         }
 
         added = buildString {
@@ -194,13 +198,15 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
         val oldServices = arrayListOf<String>()
 
         kotlin.runCatching {
-            packageInfo!!.services?.let {
+            packageInfo!!.services!!.let {
                 services.addAll(it.map { service -> service.name })
             }
 
-            oldPackageInfo!!.services?.let {
+            oldPackageInfo!!.services!!.let {
                 oldServices.addAll(it.map { service -> service.name })
             }
+        }.onFailure {
+            Log.e(TAG, "Failed to get services", it)
         }
 
         added = buildString {
@@ -247,13 +253,15 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
         val oldReceivers = arrayListOf<String>()
 
         kotlin.runCatching {
-            packageInfo!!.receivers?.let {
+            packageInfo!!.receivers!!.let {
                 receivers.addAll(it.map { receiver -> receiver.name })
             }
 
-            oldPackageInfo!!.receivers?.let {
+            oldPackageInfo!!.receivers!!.let {
                 oldReceivers.addAll(it.map { receiver -> receiver.name })
             }
+        }.onFailure {
+            Log.e(TAG, "Failed to get receivers", it)
         }
 
         added = buildString {
@@ -300,13 +308,15 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
         val oldProviders = arrayListOf<String>()
 
         kotlin.runCatching {
-            packageInfo!!.providers?.let {
+            packageInfo!!.providers!!.let {
                 providers.addAll(it.map { provider -> provider.name })
             }
 
-            oldPackageInfo!!.providers?.let {
+            oldPackageInfo!!.providers!!.let {
                 oldProviders.addAll(it.map { provider -> provider.name })
             }
+        }.onFailure {
+            Log.e(TAG, "Failed to get providers", it)
         }
 
         added = buildString {
@@ -353,13 +363,15 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
         val oldFeatures = arrayListOf<String>()
 
         kotlin.runCatching {
-            packageInfo!!.reqFeatures?.let {
+            packageInfo!!.reqFeatures!!.let {
                 features.addAll(it.map { feature -> feature.name })
             }
 
-            oldPackageInfo!!.reqFeatures?.let {
+            oldPackageInfo!!.reqFeatures!!.let {
                 oldFeatures.addAll(it.map { feature -> feature.name })
             }
+        }.onFailure {
+            Log.e(TAG, "Failed to get features", it)
         }
 
         added = buildString {
@@ -406,13 +418,15 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
         val oldNativeLibraries = arrayListOf<String>()
 
         kotlin.runCatching {
-            packageInfo!!.applicationInfo.nativeLibraryDir?.let {
+            packageInfo!!.safeApplicationInfo.nativeLibraryDir?.let {
                 nativeLibraries.addAll(it.toFile().list().orEmpty())
             }
 
-            oldPackageInfo!!.applicationInfo.nativeLibraryDir?.let {
+            oldPackageInfo!!.safeApplicationInfo.nativeLibraryDir?.let {
                 oldNativeLibraries.addAll(it.toFile().list().orEmpty())
             }
+        }.onFailure {
+            Log.e(TAG, "Failed to get native libraries", it)
         }
 
         added = buildString {
@@ -448,5 +462,9 @@ class InstallerChangesViewModel(application: Application, val file: File) : Wrap
         }
 
         return Triple(title, added.trim(), removed.trim())
+    }
+
+    companion object {
+        private const val TAG = "InstallerChangesViewModel"
     }
 }

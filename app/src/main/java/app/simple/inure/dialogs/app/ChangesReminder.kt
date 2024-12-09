@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.fragment.app.FragmentManager
 import app.simple.inure.BuildConfig
 import app.simple.inure.R
 import app.simple.inure.decorations.ripple.DynamicRippleTextView
@@ -31,7 +32,7 @@ class ChangesReminder : ScopedBottomSheetFragment() {
         MainPreferences.setChangeLogReminder(BuildConfig.VERSION_CODE)
 
         sure.setOnClickListener {
-            openFragmentSlide(WebPage.newInstance(getString(R.string.change_logs)), "changelogs")
+            openFragmentSlide(WebPage.newInstance(getString(R.string.change_logs)), WebPage.TAG)
             dismiss()
         }
 
@@ -47,5 +48,13 @@ class ChangesReminder : ScopedBottomSheetFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        fun FragmentManager.showChangesReminder(): ChangesReminder {
+            val dialog = newInstance()
+            dialog.show(this, TAG)
+            return dialog
+        }
+
+        const val TAG = "changes_reminder"
     }
 }

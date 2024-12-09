@@ -1,11 +1,16 @@
 package app.simple.inure.extensions.fragments
 
+import android.animation.LayoutTransition
 import android.app.Application
 import android.content.SharedPreferences
 import android.content.pm.PackageInfo
-import android.os.*
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.annotation.StringRes
@@ -152,7 +157,7 @@ abstract class ScopedBottomSheetFragment : BottomSheetDialogFragment(),
     }
 
     protected fun openSettings() {
-        openFragmentSlide(Preferences.newInstance(), "prefs_screen")
+        openFragmentSlide(Preferences.newInstance(), Preferences.TAG)
     }
 
     /**
@@ -181,7 +186,7 @@ abstract class ScopedBottomSheetFragment : BottomSheetDialogFragment(),
     }
 
     open fun showWarning(warning: String, dismiss: Boolean = true) {
-        childFragmentManager.showWarning(warning).setOnWarningCallbackListener {
+        parentFragmentManager.showWarning(warning).setOnWarningCallbackListener {
             if (dismiss) {
                 dismiss()
             }
@@ -189,9 +194,23 @@ abstract class ScopedBottomSheetFragment : BottomSheetDialogFragment(),
     }
 
     open fun showWarning(@StringRes warning: Int) {
-        childFragmentManager.showWarning(warning).setOnWarningCallbackListener {
+        parentFragmentManager.showWarning(warning).setOnWarningCallbackListener {
             dismiss()
         }
+    }
+
+    protected fun postDelayed(delay: Long, action: () -> Unit) {
+        handler.postDelayed({ action() }, delay)
+    }
+
+    protected fun postDelayed(action: () -> Unit) {
+        postDelayed(500, action)
+    }
+
+    protected fun ViewGroup.applyBottomSheetContainerAnimationFix() {
+        val transition = LayoutTransition()
+        transition.setAnimateParentHierarchy(false)
+        layoutTransition = transition
     }
 
     open fun fullVersionCheck(goBack: Boolean = true): Boolean {

@@ -6,18 +6,23 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
+import android.content.pm.LauncherApps
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.UserHandle
 import android.util.Log
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import app.simple.inure.R
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
+import app.simple.inure.preferences.DevelopmentPreferences
 import app.simple.inure.util.ArrayUtils.clone
 import app.simple.inure.util.ArrayUtils.toArrayList
 import app.simple.inure.util.ConditionUtils.invert
 import app.simple.inure.util.NullSafety.isNotNull
+import app.simple.inure.utils.DebloatUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -33,18 +38,23 @@ class DataLoaderService : Service() {
         const val RELOAD_APPS = "reload_apps"
         const val RELOAD_QUICK_APPS = "reload_quick_apps"
         const val REFRESH = "refresh"
+
+        private const val TAG: String = "DataLoaderService"
     }
 
-    private val tag: String = "DataLoaderService"
     private var apps: ArrayList<PackageInfo> = arrayListOf()
     private var uninstalledApps: ArrayList<PackageInfo> = arrayListOf()
-    private var downloaderThread: Thread? = null
 
     private var isLoading = false
     private var flags = PackageManager.GET_META_DATA
 
     private var broadcastReceiver: BroadcastReceiver? = null
     private var intentFilter: IntentFilter = IntentFilter()
+    private val launcherAppsService: LauncherApps by lazy {
+        getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+    }
+
+    private var launcherAppsCallback: LauncherApps.Callback? = null
 
     inner class LoaderBinder : Binder() {
         fun getService(): DataLoaderService {
@@ -58,7 +68,7 @@ class DataLoaderService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(tag, "onCreate: Dataloader service created")
+        Log.d(TAG, "onCreate: Dataloader service created")
 
         broadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
@@ -71,8 +81,46 @@ class DataLoaderService : Service() {
         }
 
         intentFilter.addAction(REFRESH)
-
         LocalBroadcastManager.getInstance(applicationContext).registerReceiver(broadcastReceiver!!, intentFilter)
+
+        if (launcherAppsCallback == null) {
+            launcherAppsCallback = object : LauncherApps.Callback() {
+                override fun onPackageRemoved(packageName: String?, user: UserHandle?) {
+                    Log.d(TAG, "onPackageRemoved: $packageName")
+                    refresh()
+                }
+
+                override fun onPackageAdded(packageName: String?, user: UserHandle?) {
+                    Log.d(TAG, "onPackageAdded: $packageName")
+                    refresh()
+                }
+
+                override fun onPackageChanged(packageName: String?, user: UserHandle?) {
+                    Log.d(TAG, "onPackageChanged: $packageName")
+                    refresh()
+                }
+
+                override fun onPackagesAvailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) {
+                    Log.d(TAG, "onPackagesAvailable: ${packageNames?.contentToString()}")
+                    refresh()
+                }
+
+                override fun onPackagesUnavailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) {
+                    Log.d(TAG, "onPackagesUnavailable: ${packageNames?.contentToString()}")
+                    refresh()
+                }
+
+                fun refresh() {
+                    if (DevelopmentPreferences.get(DevelopmentPreferences.REFRESH_APPS_LIST_USING_LAUNCHER_SERVICE)) {
+                        this@DataLoaderService.refresh()
+                    }
+                }
+            }
+
+            // launcherAppsService.registerCallback(launcherAppsCallback!!)
+        } else {
+            Log.i(TAG, "onCreate: LauncherApps callback already initialized")
+        }
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
@@ -82,13 +130,10 @@ class DataLoaderService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(tag, "onDestroy: Dataloader service destroyed")
+        Log.d(TAG, "onDestroy: Dataloader service destroyed")
         LocalBroadcastManager.getInstance(applicationContext).unregisterReceiver(broadcastReceiver!!)
-
-        try {
-            downloaderThread?.interrupt()
-        } catch (e: IllegalStateException) {
-            e.printStackTrace()
+        if (launcherAppsCallback != null) {
+            launcherAppsService.unregisterCallback(launcherAppsCallback)
         }
     }
 
@@ -128,6 +173,10 @@ class DataLoaderService : Service() {
                 // onAppsLoaded(apps.toArrayList())
                 // onUninstalledAppsLoaded(uninstalledApps.toArrayList())
 
+                // We will init bloat list here
+                // Because I couldn't think of any other place
+                DebloatUtils.initBloatAppsSet()
+
                 withContext(Dispatchers.Main) {
                     LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(Intent(APPS_LOADED))
                     isLoading = false
@@ -161,14 +210,14 @@ class DataLoaderService : Service() {
             }
 
             uninstalledApps = packageManager.getInstalledPackages(flags).stream().filter { packageInfo: PackageInfo ->
-                packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_INSTALLED == 0
+                packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_INSTALLED == 0
             }.collect(Collectors.toList()).loadPackageNames().toArrayList()
         }
     }
 
     private fun MutableList<PackageInfo>.loadPackageNames(): MutableList<PackageInfo> {
         forEach {
-            it.applicationInfo.name = getApplicationName(application.applicationContext, it.applicationInfo)
+            it.safeApplicationInfo.name = getApplicationName(application.applicationContext, it.safeApplicationInfo)
         }
 
         return this

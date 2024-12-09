@@ -23,7 +23,7 @@ import app.simple.inure.dialogs.appearance.IconSize
 import app.simple.inure.dialogs.appearance.RoundedCorner
 import app.simple.inure.dialogs.behavior.DampingRatio.Companion.showDampingRatioDialog
 import app.simple.inure.dialogs.behavior.Stiffness.Companion.showStiffnessDialog
-import app.simple.inure.dialogs.configuration.AppPath
+import app.simple.inure.dialogs.configuration.AppPath.Companion.showAppPathDialog
 import app.simple.inure.dialogs.configuration.DateFormat
 import app.simple.inure.dialogs.terminal.TerminalCommandLine
 import app.simple.inure.dialogs.terminal.TerminalHomePath
@@ -36,7 +36,6 @@ import app.simple.inure.popups.behavior.PopupDampingRatio
 import app.simple.inure.popups.behavior.PopupStiffness
 import app.simple.inure.popups.behavior.PopupTransitionType
 import app.simple.inure.preferences.DevelopmentPreferences
-import app.simple.inure.preferences.RecyclerViewPreferences
 import app.simple.inure.ui.preferences.mainscreens.AboutScreen
 import app.simple.inure.ui.preferences.mainscreens.AccessibilityScreen
 import app.simple.inure.ui.preferences.mainscreens.AppearanceScreen
@@ -61,6 +60,7 @@ import app.simple.inure.ui.preferences.subscreens.TerminalControlKey
 import app.simple.inure.ui.preferences.subscreens.TerminalFnKey
 import app.simple.inure.ui.preferences.subscreens.TerminalFontSize
 import app.simple.inure.viewmodels.panels.PreferencesViewModel
+import kotlin.math.pow
 
 class Preferences : SearchBarScopedFragment() {
 
@@ -88,63 +88,54 @@ class Preferences : SearchBarScopedFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         postponeEnterTransition()
+        // setCount(getString(R.string.app_name_full) + " | " + BuildConfig.VERSION_NAME)
 
         preferencesViewModel.getPreferences().observe(viewLifecycleOwner) {
-            postponeEnterTransition()
-
             adapterPreferences = AdapterPreferences(it)
 
             adapterPreferences.setOnPreferencesCallbackListener(object : PreferencesCallbacks {
                 override fun onPrefsClicked(imageView: ImageView, category: Int, position: Int) {
-                    RecyclerViewPreferences.setViewTag(tag)
-                    RecyclerViewPreferences.setViewPosition(position)
-
-                    /**
-                     * Workaround for shared animation lag
-                     */
-                    var duration = 100L
-                    duration += position * 60
-                    duration = duration.coerceIn(500L, 800L)
+                    val duration = (position + 1).toDouble().pow(2.0).toLong().coerceIn(500L, 800L)
 
                     when (category) {
                         R.string.appearance -> {
-                            openFragmentLinear(AppearanceScreen.newInstance(), imageView, "appearance_prefs", duration)
+                            openFragmentLinear(AppearanceScreen.newInstance(), imageView, AppearanceScreen.TAG, duration)
                         }
 
                         R.string.behavior -> {
-                            openFragmentLinear(BehaviourScreen.newInstance(), imageView, "behaviour_prefs", duration)
+                            openFragmentLinear(BehaviourScreen.newInstance(), imageView, BehaviourScreen.TAG, duration)
                         }
 
                         R.string.configuration -> {
-                            openFragmentLinear(ConfigurationScreen.newInstance(), imageView, "config_prefs", duration)
+                            openFragmentLinear(ConfigurationScreen.newInstance(), imageView, ConfigurationScreen.TAG, duration)
                         }
 
                         R.string.formatting -> {
-                            openFragmentLinear(FormattingScreen.newInstance(), imageView, "formatting_prefs", duration)
+                            openFragmentLinear(FormattingScreen.newInstance(), imageView, FormattingScreen.TAG, duration)
                         }
 
                         R.string.terminal -> {
-                            openFragmentLinear(TerminalScreen.newInstance(), imageView, "terminal_prefs", duration)
+                            openFragmentLinear(TerminalScreen.newInstance(), imageView, TerminalScreen.TAG, duration)
                         }
 
                         R.string.shell -> {
-                            openFragmentLinear(ShellScreen.newInstance(), imageView, "shell_prefs", duration)
+                            openFragmentLinear(ShellScreen.newInstance(), imageView, ShellScreen.TAG, duration)
                         }
 
                         R.string.layouts -> {
-                            openFragmentLinear(LayoutsScreen.newInstance(), imageView, "home_prefs", duration)
+                            openFragmentLinear(LayoutsScreen.newInstance(), imageView, LayoutsScreen.TAG, duration)
                         }
 
                         R.string.accessibility -> {
-                            openFragmentLinear(AccessibilityScreen.newInstance(), imageView, "accessibility_prefs", duration)
+                            openFragmentLinear(AccessibilityScreen.newInstance(), imageView, AccessibilityScreen.TAG, duration)
                         }
 
                         R.string.development -> {
-                            openFragmentLinear(DevelopmentScreen.newInstance(), imageView, "development_prefs", duration)
+                            openFragmentLinear(DevelopmentScreen.newInstance(), imageView, DevelopmentScreen.TAG, duration)
                         }
 
                         R.string.about -> {
-                            openFragmentLinear(AboutScreen.newInstance(), imageView, "about_prefs", duration)
+                            openFragmentLinear(AboutScreen.newInstance(), imageView, AboutScreen.TAG, duration)
                         }
                     }
                 }
@@ -174,27 +165,27 @@ class Preferences : SearchBarScopedFragment() {
                         R.string.appearance -> {
                             when (preferenceModel.title) {
                                 R.string.application_theme -> {
-                                    openFragmentSlide(AppearanceAppTheme.newInstance(), "theme")
+                                    openFragmentSlide(AppearanceAppTheme.newInstance(), AppearanceAppTheme.TAG)
                                 }
 
                                 R.string.accent_colors -> {
-                                    openFragmentSlide(AccentColor.newInstance(), "accent_color")
+                                    openFragmentSlide(AccentColor.newInstance(), AccentColor.TAG)
                                 }
 
                                 R.string.app_typeface -> {
-                                    openFragmentSlide(AppearanceTypeFace.newInstance(), "typeface")
+                                    openFragmentSlide(AppearanceTypeFace.newInstance(), AppearanceTypeFace.TAG)
                                 }
 
                                 R.string.corner_radius -> {
-                                    RoundedCorner.newInstance().show(childFragmentManager, "rounded_corner")
+                                    RoundedCorner.newInstance().show(childFragmentManager, RoundedCorner.TAG)
                                 }
 
                                 R.string.icon_size -> {
-                                    IconSize.newInstance().show(childFragmentManager, "icon_size")
+                                    IconSize.newInstance().show(childFragmentManager, IconSize.TAG)
                                 }
 
                                 else -> {
-                                    openFragmentSlide(AppearanceScreen.newInstance(), "appearance_prefs")
+                                    openFragmentSlide(AppearanceScreen.newInstance(), AppearanceScreen.TAG)
                                 }
                             }
                         }
@@ -210,7 +201,7 @@ class Preferences : SearchBarScopedFragment() {
                                 }
 
                                 R.string.damping_ratio -> {
-                                    if (DevelopmentPreferences.get(DevelopmentPreferences.oldStyleScrollingBehaviorDialog)) {
+                                    if (DevelopmentPreferences.get(DevelopmentPreferences.OLD_STYLE_SCROLLING_BEHAVIOR_DIALOG)) {
                                         PopupDampingRatio(view)
                                     } else {
                                         childFragmentManager.showDampingRatioDialog()
@@ -218,7 +209,7 @@ class Preferences : SearchBarScopedFragment() {
                                 }
 
                                 R.string.stiffness -> {
-                                    if (DevelopmentPreferences.get(DevelopmentPreferences.oldStyleScrollingBehaviorDialog)) {
+                                    if (DevelopmentPreferences.get(DevelopmentPreferences.OLD_STYLE_SCROLLING_BEHAVIOR_DIALOG)) {
                                         PopupStiffness(view)
                                     } else {
                                         childFragmentManager.showStiffnessDialog()
@@ -226,7 +217,7 @@ class Preferences : SearchBarScopedFragment() {
                                 }
 
                                 else -> {
-                                    openFragmentSlide(BehaviourScreen.newInstance(), "behaviour_prefs")
+                                    openFragmentSlide(BehaviourScreen.newInstance(), BehaviourScreen.TAG)
                                 }
                             }
                         }
@@ -234,24 +225,23 @@ class Preferences : SearchBarScopedFragment() {
                         R.string.configuration -> {
                             when (preferenceModel.title) {
                                 R.string.shortcuts -> {
-                                    openFragmentSlide(Shortcuts.newInstance(), "shortcuts")
+                                    openFragmentSlide(Shortcuts.newInstance(), Shortcuts.TAG)
                                 }
 
                                 R.string.components -> {
-                                    openFragmentSlide(ComponentManager.newInstance(), "components")
+                                    openFragmentSlide(ComponentManager.newInstance(), ComponentManager.TAG)
                                 }
 
                                 R.string.language -> {
-                                    openFragmentSlide(Language.newInstance(), "language")
+                                    openFragmentSlide(Language.newInstance(), Language.TAG)
                                 }
 
                                 R.string.path -> {
-                                    AppPath.newInstance()
-                                        .show(childFragmentManager, "app_path")
+                                    childFragmentManager.showAppPathDialog()
                                 }
 
                                 else -> {
-                                    openFragmentSlide(ConfigurationScreen.newInstance(), "config_prefs")
+                                    openFragmentSlide(ConfigurationScreen.newInstance(), ConfigurationScreen.TAG)
                                 }
                             }
                         }
@@ -259,11 +249,11 @@ class Preferences : SearchBarScopedFragment() {
                         R.string.formatting -> {
                             when (preferenceModel.title) {
                                 R.string.date_format -> {
-                                    DateFormat.newInstance().show(childFragmentManager, "date_format")
+                                    DateFormat.newInstance().show(childFragmentManager, DateFormat.TAG)
                                 }
 
                                 else -> {
-                                    openFragmentSlide(FormattingScreen.newInstance(), "formatting_prefs")
+                                    openFragmentSlide(FormattingScreen.newInstance(), FormattingScreen.TAG)
                                 }
                             }
                         }
@@ -271,27 +261,27 @@ class Preferences : SearchBarScopedFragment() {
                         R.string.terminal -> {
                             when (preferenceModel.title) {
                                 R.string.title_fontsize_preference -> {
-                                    openFragmentSlide(TerminalFontSize.newInstance(), "font_size")
+                                    openFragmentSlide(TerminalFontSize.newInstance(), TerminalFontSize.TAG)
                                 }
 
                                 R.string.title_color_preference -> {
-                                    openFragmentSlide(TerminalColor.newInstance(), "color")
+                                    openFragmentSlide(TerminalColor.newInstance(), TerminalColor.TAG)
                                 }
 
                                 R.string.title_backaction_preference -> {
-                                    openFragmentSlide(TerminalBackButtonAction.newInstance(), "back_button")
+                                    openFragmentSlide(TerminalBackButtonAction.newInstance(), TerminalBackButtonAction.TAG)
                                 }
 
                                 R.string.title_controlkey_preference -> {
-                                    openFragmentSlide(TerminalControlKey.newInstance(), "control_key")
+                                    openFragmentSlide(TerminalControlKey.newInstance(), TerminalControlKey.TAG)
                                 }
 
                                 R.string.title_fnkey_preference -> {
-                                    openFragmentSlide(TerminalFnKey.newInstance(), "fn_key")
+                                    openFragmentSlide(TerminalFnKey.newInstance(), TerminalFnKey.TAG)
                                 }
 
                                 else -> {
-                                    openFragmentSlide(TerminalScreen.newInstance(), "terminal_prefs")
+                                    openFragmentSlide(TerminalScreen.newInstance(), TerminalScreen.TAG)
                                 }
                             }
                         }
@@ -300,57 +290,57 @@ class Preferences : SearchBarScopedFragment() {
                             when (preferenceModel.title) {
                                 R.string.title_shell_preference -> {
                                     TerminalCommandLine.newInstance()
-                                        .show(childFragmentManager, "command_line")
+                                        .show(childFragmentManager, TerminalCommandLine.TAG)
                                 }
 
                                 R.string.title_initialcommand_preference -> {
                                     TerminalInitialCommand.newInstance()
-                                        .show(childFragmentManager, "initial_command")
+                                        .show(childFragmentManager, TerminalInitialCommand.TAG)
                                 }
 
                                 R.string.title_termtype_preference -> {
-                                    openFragmentSlide(ShellTerminalType.newInstance(), "terminal_type")
+                                    openFragmentSlide(ShellTerminalType.newInstance(), ShellTerminalType.TAG)
                                 }
 
                                 R.string.title_home_path_preference -> {
                                     TerminalHomePath.newInstance()
-                                        .show(childFragmentManager, "home_path")
+                                        .show(childFragmentManager, TerminalHomePath.TAG)
                                 }
 
                                 else -> {
-                                    openFragmentSlide(ShellScreen.newInstance(), "shell_prefs")
+                                    openFragmentSlide(ShellScreen.newInstance(), ShellScreen.TAG)
                                 }
                             }
                         }
 
                         R.string.accessibility -> {
-                            openFragmentSlide(AccessibilityScreen.newInstance(), "accessibility_prefs")
+                            openFragmentSlide(AccessibilityScreen.newInstance(), AccessibilityScreen.TAG)
                         }
 
                         R.string.development -> {
-                            openFragmentSlide(DevelopmentScreen.newInstance(), "development_prefs")
+                            openFragmentSlide(DevelopmentScreen.newInstance(), DevelopmentScreen.TAG)
                         }
 
                         R.string.about -> {
                             when (preferenceModel.title) {
                                 R.string.change_logs -> {
-                                    openFragmentSlide(WebPage.newInstance(getString(R.string.change_logs)), "web_page")
+                                    openFragmentSlide(WebPage.newInstance(getString(R.string.change_logs)), WebPage.TAG)
                                 }
 
                                 R.string.user_agreements -> {
-                                    openFragmentSlide(WebPage.newInstance(getString(R.string.user_agreements)), "web_page")
+                                    openFragmentSlide(WebPage.newInstance(getString(R.string.user_agreements)), WebPage.TAG)
                                 }
 
                                 R.string.credits -> {
-                                    openFragmentSlide(WebPage.newInstance(getString(R.string.credits)), "web_page")
+                                    openFragmentSlide(WebPage.newInstance(getString(R.string.credits)), WebPage.TAG)
                                 }
 
                                 R.string.open_source_licenses -> {
-                                    openFragmentSlide(WebPage.newInstance(getString(R.string.open_source_licenses)), "web_page")
+                                    openFragmentSlide(WebPage.newInstance(getString(R.string.open_source_licenses)), WebPage.TAG)
                                 }
 
                                 R.string.share -> {
-                                    openFragmentSlide(Share.newInstance(), "share")
+                                    openFragmentSlide(Share.newInstance(), Share.TAG)
                                 }
 
                                 R.string.github -> {
@@ -369,7 +359,7 @@ class Preferences : SearchBarScopedFragment() {
                                 }
 
                                 else -> {
-                                    openFragmentSlide(AboutScreen.newInstance(), "about_prefs")
+                                    openFragmentSlide(AboutScreen.newInstance(), AboutScreen.TAG)
                                 }
                             }
                         }
@@ -388,7 +378,7 @@ class Preferences : SearchBarScopedFragment() {
 
         memory.setOnLongClickListener {
             AppMemory.newInstance()
-                .show(childFragmentManager, "app_memory")
+                .show(childFragmentManager, AppMemory.TAG)
             return@setOnLongClickListener true
         }
 
@@ -403,7 +393,7 @@ class Preferences : SearchBarScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            PreferencesSearchConstants.preferencesSearch -> {
+            PreferencesSearchConstants.PREFERENCES_SEARCH -> {
                 searchBoxState(animate = true, PreferencesSearchConstants.isSearchVisible())
             }
         }
@@ -416,5 +406,7 @@ class Preferences : SearchBarScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "Preferences"
     }
 }

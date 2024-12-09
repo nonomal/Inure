@@ -9,12 +9,14 @@ import android.view.ViewGroup
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterDexData
+import app.simple.inure.adapters.viewers.AdapterDexData
 import app.simple.inure.constants.BundleConstants
+import app.simple.inure.constants.Warnings
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.extensions.fragments.SearchBarScopedFragment
 import app.simple.inure.factories.panels.PackageInfoFactory
 import app.simple.inure.preferences.DexClassesPreferences
+import app.simple.inure.util.NullSafety.isNull
 import app.simple.inure.viewmodels.viewers.DexDataViewModel
 
 class Dexs : SearchBarScopedFragment() {
@@ -28,8 +30,7 @@ class Dexs : SearchBarScopedFragment() {
 
         search = view.findViewById(R.id.search)
         searchBox = view.findViewById(R.id.search_edit_text)
-        title = view.findViewById(R.id.typeFaceTextView2)
-
+        title = view.findViewById(R.id.dex_title)
         recyclerView = view.findViewById(R.id.dexs_recycler_view)
 
         packageInfoFactory = PackageInfoFactory(packageInfo)
@@ -45,16 +46,22 @@ class Dexs : SearchBarScopedFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        if (packageInfo.packageName == "android") {
+            showWarning(Warnings.ANDROID_SYSTEM_DEX_CLASSES)
+        }
+
         dexDataViewModel.getDexClasses().observe(viewLifecycleOwner) {
-            val adapter = AdapterDexData(it, searchBox.text.toString().trim())
+            setCount(it.size)
 
-            adapter.onDetailsClicked = { dexClass ->
-                openFragmentSlide(
-                        ClassSourceViewer.newInstance(dexClass, packageInfo),
-                        "class_source_viewer")
+            if (recyclerView.adapter.isNull()) {
+                val adapter = AdapterDexData(it, searchBox.text.toString().trim())
+
+                adapter.onDetailsClicked = { dexClass ->
+                    openFragmentSlide(ClassSource.newInstance(dexClass, packageInfo), ClassSource.TAG)
+                }
+
+                recyclerView.adapter = adapter
             }
-
-            recyclerView.adapter = adapter
         }
 
         searchBox.doOnTextChanged { text, _, _, _ ->
@@ -78,7 +85,7 @@ class Dexs : SearchBarScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            DexClassesPreferences.dexSearch -> {
+            DexClassesPreferences.DEX_SEARCH -> {
                 searchBoxState(animate = true, DexClassesPreferences.isSearchVisible())
             }
         }
@@ -92,5 +99,7 @@ class Dexs : SearchBarScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "Dexs"
     }
 }

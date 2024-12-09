@@ -64,7 +64,7 @@ class Notes : ScopedFragment() {
                     //                        .addToBackStack("notes_editor")
                     //                        .commit()
 
-                    openFragmentArc(NotesEditor.newInstance(notesPackageInfo.packageInfo), view, "notes_editor")
+                    openFragmentArc(NotesEditor.newInstance(notesPackageInfo.packageInfo), view, NotesEditor.TAG)
                 }
 
                 override fun onNoteLongClicked(notesPackageInfo: NotesPackageInfo, position: Int, view: View) {
@@ -78,11 +78,11 @@ class Notes : ScopedFragment() {
                         }
 
                         override fun onOpenClicked() {
-                            openFragmentSlide(Note.newInstance(notesPackageInfo.packageInfo), "notes_editor")
+                            openFragmentSlide(Note.newInstance(notesPackageInfo.packageInfo), Note.TAG)
                         }
 
                         override fun onEditClicked() {
-                            openFragmentSlide(NotesEditor.newInstance(notesPackageInfo.packageInfo), "notes_editor")
+                            openFragmentSlide(NotesEditor.newInstance(notesPackageInfo.packageInfo), NotesEditor.TAG)
                         }
 
                         override fun onShareClicked() {
@@ -103,13 +103,10 @@ class Notes : ScopedFragment() {
                 }
             }
 
-            when (NotesPreferences.getListType()) {
-                NotesPreferences.LIST_TYPE_STAGGERED -> {
-                    staggeredGridLayoutManager = StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL)
-                }
-                NotesPreferences.LIST_TYPE_LIST -> {
-                    staggeredGridLayoutManager = StaggeredGridLayoutManager(1, StaggeredGridLayoutManager.VERTICAL)
-                }
+            staggeredGridLayoutManager = if (NotesPreferences.getGrid()) {
+                StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL)
+            } else {
+                StaggeredGridLayoutManager(1, StaggeredGridLayoutManager.VERTICAL)
             }
 
             staggeredGridLayoutManager?.gapStrategy = StaggeredGridLayoutManager.GAP_HANDLING_MOVE_ITEMS_BETWEEN_SPANS
@@ -141,22 +138,19 @@ class Notes : ScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            NotesPreferences.expandedNotes -> {
+            NotesPreferences.EXPANDED_NOTES -> {
                 adapterNotes?.areNotesExpanded = NotesPreferences.areNotesExpanded()
             }
-            NotesPreferences.listType -> {
-                when (NotesPreferences.getListType()) {
-                    NotesPreferences.LIST_TYPE_STAGGERED -> {
-                        recyclerView.post {
-                            TransitionManager.beginDelayedTransition(recyclerView)
-                            (recyclerView.layoutManager as StaggeredGridLayoutManager).spanCount = 2
-                        }
+            NotesPreferences.IS_GRID -> {
+                if (NotesPreferences.getGrid()) {
+                    recyclerView.post {
+                        TransitionManager.beginDelayedTransition(recyclerView)
+                        staggeredGridLayoutManager?.spanCount = 2
                     }
-                    NotesPreferences.LIST_TYPE_LIST -> {
-                        recyclerView.post {
-                            TransitionManager.beginDelayedTransition(recyclerView)
-                            (recyclerView.layoutManager as StaggeredGridLayoutManager).spanCount = 1
-                        }
+                } else {
+                    recyclerView.post {
+                        TransitionManager.beginDelayedTransition(recyclerView)
+                        staggeredGridLayoutManager?.spanCount = 1
                     }
                 }
             }
@@ -170,5 +164,7 @@ class Notes : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "Notes"
     }
 }

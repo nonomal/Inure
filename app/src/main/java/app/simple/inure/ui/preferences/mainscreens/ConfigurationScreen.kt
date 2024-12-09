@@ -1,74 +1,45 @@
 package app.simple.inure.ui.preferences.mainscreens
 
-import android.content.SharedPreferences
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.lifecycle.lifecycleScope
-import app.simple.inure.BuildConfig
 import app.simple.inure.R
 import app.simple.inure.decorations.ripple.DynamicRippleConstraintLayout
 import app.simple.inure.decorations.ripple.DynamicRippleRelativeLayout
-import app.simple.inure.decorations.switchview.SwitchView
+import app.simple.inure.decorations.toggles.Switch
 import app.simple.inure.dialogs.configuration.AppPath.Companion.showAppPathDialog
 import app.simple.inure.dialogs.miscellaneous.StoragePermission
 import app.simple.inure.dialogs.miscellaneous.StoragePermission.Companion.showStoragePermissionDialog
-import app.simple.inure.extensions.fragments.ScopedFragment
+import app.simple.inure.extensions.fragments.ShizukuStateFragment
 import app.simple.inure.preferences.ConfigurationPreferences
+import app.simple.inure.root.RootStateHelper.setRootState
 import app.simple.inure.ui.preferences.subscreens.ComponentManager
 import app.simple.inure.ui.preferences.subscreens.Language
 import app.simple.inure.ui.preferences.subscreens.Shortcuts
 import app.simple.inure.util.PermissionUtils.checkStoragePermission
-import com.topjohnwu.superuser.Shell
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import rikka.shizuku.Shizuku
-import rikka.shizuku.ShizukuProvider
 
-class ConfigurationScreen : ScopedFragment() {
+class ConfigurationScreen : ShizukuStateFragment() {
 
-    private lateinit var keepScreenOnSwitchView: SwitchView
+    private lateinit var keepScreenOnSwitchView: Switch
     private lateinit var shortcuts: DynamicRippleRelativeLayout
-    private lateinit var componets: DynamicRippleRelativeLayout
+    private lateinit var components: DynamicRippleRelativeLayout
     private lateinit var language: DynamicRippleRelativeLayout
     private lateinit var path: DynamicRippleConstraintLayout
-    private lateinit var rootSwitchView: SwitchView
-    private lateinit var shizukuSwitchView: SwitchView
-
-    private lateinit var requestPermissionLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var showUsersSwitch: Switch
+    private lateinit var rootSwitchView: Switch
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = inflater.inflate(R.layout.preferences_configuration, container, false)
 
         keepScreenOnSwitchView = view.findViewById(R.id.configuration_switch_keep_screen_on)
         shortcuts = view.findViewById(R.id.configuration_shortcuts)
-        componets = view.findViewById(R.id.configuration_component_manager)
+        components = view.findViewById(R.id.configuration_component_manager)
         language = view.findViewById(R.id.configuration_language)
         path = view.findViewById(R.id.configuration_path)
+        showUsersSwitch = view.findViewById(R.id.configuration_show_user_list_switch)
         rootSwitchView = view.findViewById(R.id.configuration_root_switch_view)
-        shizukuSwitchView = view.findViewById(R.id.configuration_shizuku_switch_view)
-
-        requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-            permissions.forEach {
-                when (it.key) {
-                    ShizukuProvider.PERMISSION -> {
-                        if (it.value) {
-                            ConfigurationPreferences.setUsingShizuku(true)
-                            shizukuSwitchView.setChecked(true)
-                        } else {
-                            ConfigurationPreferences.setUsingShizuku(false)
-                            shizukuSwitchView.setChecked(false)
-                        }
-                    }
-                }
-            }
-        }
 
         return view
     }
@@ -77,9 +48,11 @@ class ConfigurationScreen : ScopedFragment() {
         super.onViewCreated(view, savedInstanceState)
         startPostponedEnterTransition()
 
-        keepScreenOnSwitchView.setChecked(ConfigurationPreferences.isKeepScreenOn())
-        rootSwitchView.setChecked(ConfigurationPreferences.isUsingRoot())
-        shizukuSwitchView.setChecked(ConfigurationPreferences.isUsingShizuku())
+        keepScreenOnSwitchView.isChecked = ConfigurationPreferences.isKeepScreenOn()
+        showUsersSwitch.isChecked = ConfigurationPreferences.isShowUsersList()
+        rootSwitchView.isChecked = ConfigurationPreferences.isUsingRoot()
+
+        rootSwitchView.setRootState(viewLifecycleOwner)
 
         keepScreenOnSwitchView.setOnSwitchCheckedChangeListener { isChecked ->
             ConfigurationPreferences.setKeepScreenOn(isChecked)
@@ -92,15 +65,15 @@ class ConfigurationScreen : ScopedFragment() {
         }
 
         shortcuts.setOnClickListener {
-            openFragmentSlide(Shortcuts.newInstance(), "shortcuts")
+            openFragmentSlide(Shortcuts.newInstance(), Shortcuts.TAG)
         }
 
-        componets.setOnClickListener {
-            openFragmentSlide(ComponentManager.newInstance(), "components")
+        components.setOnClickListener {
+            openFragmentSlide(ComponentManager.newInstance(), ComponentManager.TAG)
         }
 
         language.setOnClickListener {
-            openFragmentSlide(Language.newInstance(), "language")
+            openFragmentSlide(Language.newInstance(), Language.TAG)
         }
 
         path.setOnClickListener {
@@ -115,62 +88,8 @@ class ConfigurationScreen : ScopedFragment() {
             }
         }
 
-        rootSwitchView.setOnSwitchCheckedChangeListener { it ->
-            if (it) {
-                viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-                    kotlin.runCatching {
-                        Shell.enableVerboseLogging = BuildConfig.DEBUG
-                        Shell.setDefaultBuilder(
-                                Shell.Builder
-                                    .create()
-                                    .setFlags(Shell.FLAG_REDIRECT_STDERR or Shell.FLAG_MOUNT_MASTER)
-                                    .setTimeout(10))
-                    }.getOrElse {
-                        it.printStackTrace()
-                    }
-
-                    Shell.getShell() // Request root access
-
-                    if (Shell.isAppGrantedRoot() == true) {
-                        withContext(Dispatchers.Main) {
-                            ConfigurationPreferences.setUsingRoot(true)
-                            rootSwitchView.setChecked(true)
-                        }
-                    } else {
-                        withContext(Dispatchers.Main) {
-                            ConfigurationPreferences.setUsingRoot(false)
-                            rootSwitchView.setChecked(false)
-                        }
-                    }
-                }
-            } else {
-                ConfigurationPreferences.setUsingRoot(false)
-                rootSwitchView.setChecked(false)
-            }
-        }
-
-        shizukuSwitchView.setOnSwitchCheckedChangeListener { it ->
-            if (it) {
-                requestPermissionLauncher.launch(arrayOf(ShizukuProvider.PERMISSION))
-            } else {
-                ConfigurationPreferences.setUsingShizuku(false)
-            }
-        }
-    }
-
-    private fun isShizukuPermissionGranted(): Boolean {
-        return if (Shizuku.isPreV11() || Shizuku.getVersion() < 11) {
-            requireActivity().checkSelfPermission(ShizukuProvider.PERMISSION) == PackageManager.PERMISSION_GRANTED
-        } else {
-            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        when (key) {
-            ConfigurationPreferences.isUsingRoot -> {
-                // rootSwitchView.setChecked(ConfigurationPreferences.isUsingRoot())
-            }
+        showUsersSwitch.setOnSwitchCheckedChangeListener {
+            ConfigurationPreferences.setShowUsersList(it)
         }
     }
 
@@ -181,5 +100,7 @@ class ConfigurationScreen : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "ConfigurationScreen"
     }
 }

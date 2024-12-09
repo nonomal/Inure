@@ -8,9 +8,8 @@ import androidx.lifecycle.viewModelScope
 import app.simple.inure.constants.Warnings
 import app.simple.inure.exceptions.InureShellException
 import app.simple.inure.extensions.viewmodels.RootShizukuViewModel
+import app.simple.inure.helpers.ShizukuServiceHelper
 import app.simple.inure.models.PermissionInfo
-import app.simple.inure.shizuku.Shell.Command
-import app.simple.inure.shizuku.ShizukuUtils
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -71,26 +70,6 @@ class PermissionStatusViewModel(application: Application, val packageInfo: Packa
         }
     }
 
-    private fun runShizuku() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val mode = if (this@PermissionStatusViewModel.permissionInfo.isGranted == 1) "revoke" else "grant"
-
-            kotlin.runCatching {
-                ShizukuUtils.execInternal(Command("pm $mode ${packageInfo.packageName} ${permissionInfo.name}"), null).let {
-                    result.postValue(it.toString())
-                }
-            }.onSuccess {
-                success.postValue("Done")
-            }.onFailure {
-                result.postValue("\n" + it.message!!)
-                success.postValue("Failed")
-            }.getOrElse {
-                result.postValue("\n" + it.message!!)
-                success.postValue("Failed")
-            }
-        }
-    }
-
     override fun onShellCreated(shell: Shell?) {
         runCommand()
     }
@@ -100,8 +79,24 @@ class PermissionStatusViewModel(application: Application, val packageInfo: Packa
         success.postValue("Failed")
     }
 
-    override fun onShizukuCreated() {
-        runShizuku()
+    override fun onShizukuCreated(shizukuServiceHelper: ShizukuServiceHelper) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val mode = if (this@PermissionStatusViewModel.permissionInfo.isGranted == 1) "revoke" else "grant"
+
+            kotlin.runCatching {
+                shizukuServiceHelper.service!!.simpleExecute("pm $mode ${packageInfo.packageName} ${permissionInfo.name}").let {
+                    result.postValue(it.toString())
+                }
+            }.onSuccess {
+                success.postValue("Done")
+            }.onFailure {
+                result.postValue("\n" + it.message)
+                success.postValue("Failed")
+            }.getOrElse {
+                result.postValue("\n" + it.message)
+                success.postValue("Failed")
+            }
+        }
     }
 
     fun setPermissionState(mode: PermissionInfo) {

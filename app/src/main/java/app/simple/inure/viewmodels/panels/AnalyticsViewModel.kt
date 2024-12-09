@@ -8,8 +8,10 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.R
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.PackageUtilsViewModel
 import app.simple.inure.preferences.AnalyticsPreferences
+import app.simple.inure.util.ConditionUtils.isNotZero
 import app.simple.inure.util.SDKHelper
 import com.github.mikephil.charting.data.PieEntry
 import kotlinx.coroutines.Dispatchers
@@ -25,10 +27,6 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>>()
     }
 
-    private val installLocationData: MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>> by lazy {
-        MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>>()
-    }
-
     private val packageTypeData: MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>> by lazy {
         MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>>()
     }
@@ -41,10 +39,6 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         return targetOsData
     }
 
-    fun getInstallLocationData(): LiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>> {
-        return installLocationData
-    }
-
     fun getPackageTypeData(): LiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>> {
         return packageTypeData
     }
@@ -54,19 +48,22 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         viewModelScope.launch(Dispatchers.IO) {
             val data = arrayListOf<PieEntry>()
             val colors = arrayListOf<Int>()
+            val isSdkCode = AnalyticsPreferences.getSDKValue()
 
-            // TODO - improve this code
             for (sdkCode in 1..SDKHelper.totalSDKs) {
                 var total = 0F
+
                 for (app in apps) {
-                    val sdk = app.applicationInfo.minSdkVersion
+                    val sdk = app.safeApplicationInfo.minSdkVersion
                     if (sdk == sdkCode) {
                         ++total
                     }
                 }
 
-                if (total != 0F) { // Filter empty data
-                    data.add(PieEntry(total, if (AnalyticsPreferences.getSDKValue()) SDKHelper.getSdkCode(sdkCode) else SDKHelper.getSdkTitle(sdkCode)))
+                if (total.isNotZero()) { // Filter empty data
+                    val sdk = if (isSdkCode) SDKHelper.getSdkCode(sdkCode) else SDKHelper.getSdkTitle(sdkCode)
+
+                    data.add(PieEntry(total, sdk))
                     colors.add(SDKHelper.getSdkColor(sdkCode, applicationContext()))
                 }
             }
@@ -79,19 +76,22 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         viewModelScope.launch(Dispatchers.IO) {
             val data = arrayListOf<PieEntry>()
             val colors = arrayListOf<Int>()
+            val isSdkCode = AnalyticsPreferences.getSDKValue()
 
-            // TODO - improve this code
             for (sdkCode in 1..SDKHelper.totalSDKs) {
                 var total = 0F
+
                 for (app in apps) {
-                    val sdk = app.applicationInfo.targetSdkVersion
+                    val sdk = app.safeApplicationInfo.targetSdkVersion
                     if (sdk == sdkCode) {
-                        ++total
+                        total = total.inc()
                     }
                 }
 
-                if (total != 0F) { // Filter empty data
-                    data.add(PieEntry(total, if (AnalyticsPreferences.getSDKValue()) SDKHelper.getSdkCode(sdkCode) else SDKHelper.getSdkTitle(sdkCode)))
+                if (total.isNotZero()) { // Filter empty data
+                    val sdk = if (isSdkCode) SDKHelper.getSdkCode(sdkCode) else SDKHelper.getSdkTitle(sdkCode)
+
+                    data.add(PieEntry(total, sdk))
                     colors.add(SDKHelper.getSdkColor(sdkCode, applicationContext()))
                 }
             }
@@ -100,52 +100,23 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         }
     }
 
-    private fun loadInstallLocationData(apps: ArrayList<PackageInfo>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val data = arrayListOf<PieEntry>()
-            val colors = arrayListOf<Int>()
-
-            var internal = 0F
-            var external = 0F
-            var auto = 0F
-            var unspecified = 0F
-
-            for (app in apps) {
-                when (app.installLocation) {
-                    PackageInfo.INSTALL_LOCATION_AUTO -> auto++
-                    PackageInfo.INSTALL_LOCATION_INTERNAL_ONLY -> internal++
-                    PackageInfo.INSTALL_LOCATION_PREFER_EXTERNAL -> external++
-                    -1 -> unspecified++
-                }
-            }
-
-            if (internal != 0F) data.add(PieEntry(internal, getString(R.string.internal)))
-            if (external != 0F) data.add(PieEntry(external, getString(R.string.prefer_external)))
-            if (auto != 0F) data.add(PieEntry(auto, getString(R.string.auto)))
-            if (unspecified != 0F) data.add(PieEntry(unspecified, getString(R.string.unspecified)))
-
-            installLocationData.postValue(Pair(data, colors))
-        }
-    }
-
     private fun loadPackageTypeData(apps: ArrayList<PackageInfo>) {
         viewModelScope.launch(Dispatchers.IO) {
             val data = arrayListOf<PieEntry>()
             val colors = arrayListOf<Int>()
-
             var split = 0F
             var apk = 0F
 
             for (app in apps) {
-                if (app.applicationInfo.splitSourceDirs.isNullOrEmpty()) {
-                    apk++
+                if (app.safeApplicationInfo.splitSourceDirs.isNullOrEmpty()) {
+                    apk = apk.inc()
                 } else {
-                    split++
+                    split = split.inc()
                 }
             }
 
-            if (split != 0F) data.add(PieEntry(split, getString(R.string.split_packages)))
-            if (apk != 0F) data.add(PieEntry(apk, getString(R.string.apk)))
+            if (split.isNotZero()) data.add(PieEntry(split, getString(R.string.split_packages)))
+            if (apk.isNotZero()) data.add(PieEntry(apk, getString(R.string.apk)))
 
             packageTypeData.postValue(Pair(data, colors))
         }
@@ -155,8 +126,8 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             loadMinimumOsData(apps)
         }
+
         loadTargetOsData(apps)
-        loadInstallLocationData(apps)
         loadPackageTypeData(apps)
     }
 

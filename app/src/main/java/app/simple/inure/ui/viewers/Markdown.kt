@@ -9,28 +9,29 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebSettings
 import android.widget.Toast
-import androidx.activity.OnBackPressedCallback
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.constants.MimeConstants
+import app.simple.inure.constants.Misc
 import app.simple.inure.decorations.fastscroll.FastScrollerBuilder
 import app.simple.inure.decorations.ripple.DynamicRippleImageButton
 import app.simple.inure.decorations.typeface.TypeFaceTextView
-import app.simple.inure.decorations.views.MarkedView
 import app.simple.inure.extensions.fragments.ScopedFragment
 import app.simple.inure.factories.panels.TextViewViewModelFactory
 import app.simple.inure.popups.viewers.PopupXmlViewer
 import app.simple.inure.viewmodels.viewers.TextViewerViewModel
+import io.noties.markwon.AbstractMarkwonPlugin
+import io.noties.markwon.Markwon
+import io.noties.markwon.core.MarkwonTheme
 import java.io.IOException
 
 class Markdown : ScopedFragment() {
 
-    private lateinit var codeView: MarkedView
+    private lateinit var codeView: TypeFaceTextView
     private lateinit var path: TypeFaceTextView
     private lateinit var options: DynamicRippleImageButton
 
@@ -38,7 +39,6 @@ class Markdown : ScopedFragment() {
     private lateinit var textViewViewModelFactory: TextViewViewModelFactory
 
     private var code = ""
-
     private var backPress: OnBackPressedDispatcher? = null
 
     private val exportText = registerForActivityResult(ActivityResultContracts.CreateDocument(MimeConstants.markdownType)) { uri: Uri? ->
@@ -88,16 +88,16 @@ class Markdown : ScopedFragment() {
 
         textViewerViewModel.getText().observe(viewLifecycleOwner) {
             code = it
-            codeView.setBackgroundColor(0)
-            codeView.settings.apply {
-                setSupportZoom(false)
-                useWideViewPort = false
-                builtInZoomControls = true
-                displayZoomControls = false
-                layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
-            }
-            codeView.canGoBack()
-            codeView.setMDText(it)
+
+            val markwon = Markwon.builder(requireContext())
+                .usePlugin(object : AbstractMarkwonPlugin() {
+                    override fun configureTheme(builder: MarkwonTheme.Builder) {
+                        builder.linkColor(Misc.linkColor)
+                    }
+                })
+                .build()
+
+            markwon.setMarkdown(codeView, it)
         }
 
         options.setOnClickListener {
@@ -121,26 +121,18 @@ class Markdown : ScopedFragment() {
                 }
             })
         }
-
-        backPress?.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (codeView.canGoBack()) {
-                    codeView.goBack()
-                    codeView.settings.layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
-                } else {
-                    remove()
-                    requireActivity().onBackPressedDispatcher.onBackPressed()
-                }
-            }
-        })
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        codeView.saveState(outState)
-        super.onSaveInstanceState(outState)
     }
 
     companion object {
+
+        /**
+         * @param packageInfo: PackageInfo of the app
+         * @param path: path of the file to be opened
+         * @param isRaw: true if the file is specified directly from the
+         *               app and not needed to be fetched from the [PackageInfo],
+         *               If true, [packageInfo] can be null however it's recommended
+         *               to pass the empty [PackageInfo] object
+         */
         fun newInstance(packageInfo: PackageInfo, path: String, isRaw: Boolean = false): Markdown {
             val args = Bundle()
             args.putParcelable(BundleConstants.packageInfo, packageInfo)
@@ -150,5 +142,7 @@ class Markdown : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "markdown_viewer"
     }
 }

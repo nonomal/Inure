@@ -37,7 +37,7 @@ class AppearanceAppTheme : ScopedFragment(), ThemeChangedListener {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            AppearancePreferences.theme -> {
+            AppearancePreferences.THEME -> {
                 handler.postDelayed({ ThemeUtils.setAppTheme(resources) }, 25)
             }
         }
@@ -64,5 +64,7 @@ class AppearanceAppTheme : ScopedFragment(), ThemeChangedListener {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "AppearanceAppTheme"
     }
 }

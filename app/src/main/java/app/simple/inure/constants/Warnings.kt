@@ -47,4 +47,59 @@ object Warnings {
      * Root service is taking too long to respond
      */
     fun getRootServiceTimeoutWarning(): String = "0x009: Root service is taking too long to respond, try restarting the app."
+
+    /**
+     * Activity not found or not supported by your device
+     */
+    fun getActivityNotFoundWarning(): String = "0x00A: Activity not found or not supported by your device"
+
+    /**
+     * Shizuku binder is not ready
+     */
+    const val SHIZUKU_BINDER_NOT_READY = "0x00B: Shizuku binder is not ready, please check if Shizuku is running properly."
+
+    /**
+     * Shizuku permission denied, please open the Shizuku app and grant the permission
+     */
+    const val SHIZUKU_PERMISSION_DENIED = "0x00C: Shizuku permission denied, please open the Shizuku app and grant the permission manually."
+
+    /**
+     * Android System dex classes are not supported
+     */
+    const val ANDROID_SYSTEM_DEX_CLASSES = "0x00D: Android System dex classes are not supported"
+
+    /**
+     * Empty flags
+     */
+    const val EMPTY_FLAGS = "0x00E: Empty flags"
+
+    /**
+     * Usage stats access blocked
+     */
+    const val USAGE_STATS_ACCESS_BLOCKED = "0x00F: Usage stats access blocked"
+
+    /**
+     * Root or shizuku required to change the state
+     */
+    const val ROOT_OR_SHIZUKU_REQUIRED = "0x010: Root or Shizuku required to change the state"
+
+    /**
+     * If you're experiencing longer loading times, you can always disable startup loading from Preferences -> Behavior
+     */
+    const val LONG_LOADING_TIME = "0x011: If you're experiencing longer loading times, you can always disable startup loading from Preferences -> Behavior"
+
+    /**
+     * Data contains an unsupported type value
+     *
+     * Replace $ with the unsupported type value
+     */
+    const val UNSUPPORTED_TYPE_VALUE = "0x012: data contains an unsupported type value: $"
+
+    /**
+     * Using development features may cause unexpected behaviors in the app
+     */
+    const val DEVELOPMENT_FEATURES_WARNING = "0x013: Using development features may cause unexpected behaviors in the app, use these toggles at your own discretion. " +
+            "These features are experimental and may also be removed from the app in future."
+
+    const val UNIDENTIFIED_ERROR = "0x000788: unidentified error occurred"
 }

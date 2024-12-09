@@ -9,11 +9,12 @@ import android.view.ViewGroup
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterActivities
+import app.simple.inure.adapters.viewers.AdapterActivities
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.dialogs.action.ActivityLauncher
 import app.simple.inure.dialogs.action.ComponentState
+import app.simple.inure.dialogs.action.ComponentState.Companion.showComponentStateDialog
 import app.simple.inure.dialogs.miscellaneous.IntentAction
 import app.simple.inure.extensions.fragments.SearchBarScopedFragment
 import app.simple.inure.extensions.popup.PopupMenuCallback
@@ -57,10 +58,11 @@ class Activities : SearchBarScopedFragment() {
         activitiesViewModel.getActivities().observe(viewLifecycleOwner) { it ->
             adapterActivities = AdapterActivities(packageInfo, it, searchBox.text.toString().trim())
             recyclerView.adapter = adapterActivities
+            setCount(it.size)
 
             adapterActivities?.setOnActivitiesCallbacks(object : AdapterActivities.Companion.ActivitiesCallbacks {
                 override fun onActivityClicked(activityInfoModel: ActivityInfoModel, packageId: String) {
-                    openFragmentSlide(ActivityInfo.newInstance(activityInfoModel, packageInfo), "activity_info")
+                    openFragmentSlide(ActivityInfo.newInstance(activityInfoModel, packageInfo), ActivityInfo.TAG)
                 }
 
                 override fun onActivityLongPressed(activityInfoModel: ActivityInfoModel, packageInfo: PackageInfo, icon: View, position: Int) {
@@ -70,21 +72,19 @@ class Activities : SearchBarScopedFragment() {
                             when (source) {
                                 getString(R.string.force_launch) -> {
                                     ActivityLauncher.newInstance(packageInfo, activityInfoModel.name)
-                                        .show(childFragmentManager, "activity_launcher")
+                                        .show(childFragmentManager, ActivityLauncher.TAG)
                                 }
 
                                 getString(R.string.force_launch_with_action) -> {
                                     IntentAction.newInstance(packageInfo, activityInfoModel.name)
-                                        .show(childFragmentManager, "intent_action")
+                                        .show(childFragmentManager, IntentAction.TAG)
                                 }
                                 getString(R.string.enable), getString(R.string.disable) -> {
-                                    val p = ComponentState.newInstance(packageInfo, activityInfoModel.name, isEnabled)
-                                    p.setOnComponentStateChangeListener(object : ComponentState.Companion.ComponentStatusCallbacks {
+                                    showComponentStateDialog(packageInfo, activityInfoModel.name, isEnabled, object : ComponentState.Companion.ComponentStatusCallbacks {
                                         override fun onSuccess() {
                                             adapterActivities?.notifyItemChanged(position)
                                         }
                                     })
-                                    p.show(childFragmentManager, "component_state")
                                 }
                                 getString(R.string.create_shortcut) -> {
                                     if (activityInfoModel.exported) {
@@ -133,7 +133,7 @@ class Activities : SearchBarScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            ActivitiesPreferences.activitySearch -> {
+            ActivitiesPreferences.ACTIVITY_SEARCH -> {
                 searchBoxState(true, ActivitiesPreferences.isSearchVisible())
             }
         }
@@ -148,5 +148,7 @@ class Activities : SearchBarScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "activities"
     }
 }
