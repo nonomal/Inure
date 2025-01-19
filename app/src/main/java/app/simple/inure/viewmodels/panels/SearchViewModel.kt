@@ -1,55 +1,47 @@
 package app.simple.inure.viewmodels.panels
 
 import android.app.Application
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.PackageManager.NameNotFoundException
 import android.os.Build
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import app.simple.inure.apk.parsers.APKParser
-import app.simple.inure.apk.utils.PermissionUtils.getPermissionInfo
+import app.simple.inure.apk.parsers.APKParser.getMatchedResourcesSize
+import app.simple.inure.apk.utils.PackageUtils.isInstalled
+import app.simple.inure.apk.utils.PackageUtils.isSystemApp
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.SortConstant
 import app.simple.inure.database.instances.TagsDatabase
 import app.simple.inure.extensions.viewmodels.PackageUtilsViewModel
-import app.simple.inure.models.SearchModel
+import app.simple.inure.models.Search
 import app.simple.inure.preferences.SearchPreferences
+import app.simple.inure.util.ArrayUtils.addIfNotExists
+import app.simple.inure.util.ArrayUtils.getMatchedCount
 import app.simple.inure.util.ArrayUtils.toArrayList
 import app.simple.inure.util.ConditionUtils.invert
 import app.simple.inure.util.FlagUtils
 import app.simple.inure.util.Sort.getSortedList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.util.stream.Collectors
-import kotlin.concurrent.thread
 
 class SearchViewModel(application: Application) : PackageUtilsViewModel(application) {
 
     private var apps: ArrayList<PackageInfo> = arrayListOf()
-    private var deepApps: ArrayList<PackageInfo> = arrayListOf()
-    private var thread: Thread? = null
-
-    @Suppress("DEPRECATION")
-    private var flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-        PackageManager.GET_META_DATA or
-                PackageManager.GET_PERMISSIONS or
-                PackageManager.GET_ACTIVITIES or
-                PackageManager.GET_SERVICES or
-                PackageManager.GET_RECEIVERS or
-                PackageManager.GET_PROVIDERS or
-                PackageManager.MATCH_UNINSTALLED_PACKAGES or
-                PackageManager.MATCH_DISABLED_COMPONENTS
-    } else {
-        PackageManager.GET_META_DATA or
-                PackageManager.GET_PERMISSIONS or
-                PackageManager.GET_ACTIVITIES or
-                PackageManager.GET_SERVICES or
-                PackageManager.GET_RECEIVERS or
-                PackageManager.GET_PROVIDERS or
-                PackageManager.GET_UNINSTALLED_PACKAGES or
-                PackageManager.GET_DISABLED_COMPONENTS
-    }
+    private var deepPackageInfos: ArrayList<PackageInfo> = arrayListOf()
+    private var searchJobs: MutableSet<Job> = mutableSetOf()
+    private val semaphore = Semaphore(MAX_PARALLEL_STREAMS)
 
     private val searchKeywords: MutableLiveData<String> by lazy {
         MutableLiveData<String>().also {
@@ -57,12 +49,8 @@ class SearchViewModel(application: Application) : PackageUtilsViewModel(applicat
         }
     }
 
-    private val searchData: MutableLiveData<ArrayList<PackageInfo>> by lazy {
-        MutableLiveData<ArrayList<PackageInfo>>()
-    }
-
-    private val deepSearchData: MutableLiveData<ArrayList<SearchModel>> by lazy {
-        MutableLiveData<ArrayList<SearchModel>>()
+    private val searchData: MutableLiveData<ArrayList<Search>> by lazy {
+        MutableLiveData<ArrayList<Search>>()
     }
 
     private val tags: MutableLiveData<ArrayList<String>> by lazy {
@@ -75,432 +63,227 @@ class SearchViewModel(application: Application) : PackageUtilsViewModel(applicat
         return searchKeywords
     }
 
-    fun setSearchKeywords(keywords: String) {
-        SearchPreferences.setLastSearchKeyword(keywords)
-        searchKeywords.postValue(keywords)
-        initiateSearch(keywords)
-    }
-
-    fun getSearchData(): LiveData<ArrayList<PackageInfo>> {
+    fun getSearchData(): LiveData<ArrayList<Search>> {
         return searchData
-    }
-
-    fun getDeepSearchData(): LiveData<ArrayList<SearchModel>> {
-        return deepSearchData
     }
 
     fun getTags(): LiveData<ArrayList<String>> {
         return tags
     }
 
+    fun shouldShowLoader(): Boolean {
+        return searchData.value.isNullOrEmpty()
+    }
+
     fun initiateSearch(keywords: String) {
-        thread?.interrupt()
-        thread = thread(priority = 10, name = keywords) {
+        searchJobs.forEach { it.cancel() }
+
+        val job = viewModelScope.launch(Dispatchers.IO) {
             try {
-                if (SearchPreferences.isDeepSearchEnabled()) {
-                    loadDeepSearchData(keywords)
-                } else {
-                    loadSearchData(keywords)
-                }
+                searchKeywords.postValue(keywords)
+                ensureActive()
+                loadSearchData(keywords)
             } catch (e: IllegalStateException) {
+                e.printStackTrace()
+            } catch (e: CancellationException) {
                 e.printStackTrace()
             }
         }
+
+        searchJobs.add(job)
     }
 
     fun reload() { // These two fun already runs in their own threads
+        deepPackageInfos.clear()
         apps.clear()
-        deepApps.clear()
         refreshPackageData()
-        initiateSearch(searchKeywords.value ?: "")
     }
 
-    @Suppress("UNCHECKED_CAST")
-    private fun loadSearchData(keywords: String) {
-        var apps = (getInstalledApps() + getUninstalledApps()).toArrayList()
-
+    private suspend fun loadSearchData(keywords: String) = coroutineScope {
         if (keywords.isEmpty()) {
             searchData.postValue(arrayListOf())
-            return
+            return@coroutineScope
         }
 
-        apps = if (keywords.startsWith("#")) {
-            val tagsDatabase = TagsDatabase.getInstance(application.applicationContext)
-            val tag = keywords.substring(1)
-            val tagApps = tagsDatabase?.getTagDao()?.getTag(tag)?.packages?.split(",")
+        ensureActive()
 
-            apps.stream().filter { p ->
-                tagApps?.contains(p.packageName) ?: false
-            }.collect(Collectors.toList()) as ArrayList<PackageInfo>
+        val sanitizedKeyword = keywords.split(" ").getOrNull(1).takeIf { keywords.startsWith("#") } ?: keywords
+        val allApps = (getInstalledApps() + getUninstalledApps()).toArrayList()
+        val filteredApps = arrayListOf<PackageInfo>()
+
+        allApps.filterCategories(keywords).applyFilters(filteredApps)
+        filteredApps.getSortedList(SearchPreferences.getSortStyle(), SearchPreferences.isReverseSorting())
+
+        ensureActive()
+
+        val searchResults = if (sanitizedKeyword.isNotEmpty()) {
+            if (SearchPreferences.isDeepSearchEnabled()) {
+                if (deepPackageInfos.isEmpty()) {
+                    loadDataForDeepSearch(filteredApps)
+                }
+                val deepSearchResults = arrayListOf<Search>().apply {
+                    addDeepSearchData(sanitizedKeyword, deepPackageInfos)
+                }
+                deepSearchResults.filter { hasValidCounts(it) || hasMatchingNames(it, sanitizedKeyword) }
+            } else {
+                filteredApps.map { Search(it) }.filter { hasMatchingNames(it, sanitizedKeyword) }
+            }
         } else {
-            apps.stream().filter { p ->
-                p.applicationInfo.name.contains(keywords, SearchPreferences.isCasingIgnored())
-                        || p.packageName.contains(keywords, SearchPreferences.isCasingIgnored())
-            }.collect(Collectors.toList()) as ArrayList<PackageInfo>
+            filteredApps.map { Search(it) }
         }
 
-        when (SearchPreferences.getAppsCategory()) {
-            SortConstant.SYSTEM -> {
-                apps = apps.stream().filter { p ->
-                    p.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
-                }.collect(Collectors.toList()) as ArrayList<PackageInfo>
-            }
-            SortConstant.USER -> {
-                apps = apps.stream().filter { p ->
-                    p.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
-                }.collect(Collectors.toList()) as ArrayList<PackageInfo>
-            }
-        }
-
-        var filteredList = arrayListOf<PackageInfo>()
-
-        if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.COMBINE_FLAGS)) { // Pretty special case, even I don't know what I did here
-            filteredList.addAll((apps.clone() as ArrayList<PackageInfo>).stream().filter { p ->
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.DISABLED)) {
-                    if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.ENABLED)) {
-                        true
-                    } else {
-                        p.applicationInfo.enabled.invert()
-                    }
-                } else {
-                    true
-                } && if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.ENABLED)) {
-                    if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.DISABLED)) {
-                        true
-                    } else {
-                        p.applicationInfo.enabled
-                    }
-                } else {
-                    true
-                } && if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.APK)) {
-                    if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.SPLIT)) {
-                        true
-                    } else {
-                        p.applicationInfo.splitSourceDirs.isNullOrEmpty()
-                    }
-                } else {
-                    true
-                } && if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.SPLIT)) {
-                    if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.APK)) {
-                        true
-                    } else {
-                        p.applicationInfo.splitSourceDirs?.isNotEmpty() ?: false
-                    }
-                } else {
-                    true
-                } && if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.UNINSTALLED)) {
-                    p.applicationInfo.flags and ApplicationInfo.FLAG_INSTALLED == 0
-                } else {
-                    true
-                }
-            }.collect(Collectors.toList()) as ArrayList<PackageInfo>)
-        } else {
-            for (app in apps) {
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.DISABLED)) {
-                    if (app.applicationInfo.enabled.invert()) {
-                        if (!filteredList.contains(app)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.ENABLED)) {
-                    if (app.applicationInfo.enabled) {
-                        if (!filteredList.contains(app)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.APK)) {
-                    if (app.applicationInfo.splitSourceDirs.isNullOrEmpty()) {
-                        if (!filteredList.contains(app)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.SPLIT)) {
-                    if (app.applicationInfo.splitSourceDirs?.isNotEmpty() == true) {
-                        if (!filteredList.contains(app)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.UNINSTALLED)) {
-                    if (app.applicationInfo.flags and ApplicationInfo.FLAG_INSTALLED == 0) {
-                        if (!filteredList.contains(app)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-            }
-
-            // Remove duplicate elements
-            filteredList = filteredList.stream().distinct().collect(Collectors.toList()) as ArrayList<PackageInfo>
-        }
-
-        filteredList.getSortedList(SearchPreferences.getSortStyle(), SearchPreferences.isReverseSorting())
-
-        if (Thread.currentThread().name == thread?.name) {
-            searchData.postValue(filteredList)
-        }
+        ensureActive()
+        searchData.postValue(ArrayList(searchResults))
     }
 
-    private fun loadDeepSearchData(keywords: String) {
-        var list = arrayListOf<SearchModel>()
-        var apps: ArrayList<PackageInfo>
+    private fun hasValidCounts(search: Search): Boolean {
+        return search.permissions > 0 || search.activities > 0 || search.services > 0 ||
+                search.receivers > 0 || search.providers > 0 || search.resources > 0
+    }
 
-        if (keywords.isEmpty()) {
-            deepSearchData.postValue(arrayListOf())
-            return
-        }
-
-        if (deepApps.isEmpty()) {
-            deepApps = packageManager.getInstalledPackages(flags.toLong()).loadPackageNames()
-        }
-
-        @Suppress("UNCHECKED_CAST")
-        apps = deepApps.clone() as ArrayList<PackageInfo>
-
-        when (SearchPreferences.getAppsCategory()) {
-            SortConstant.SYSTEM -> {
-                apps = apps.stream().filter { p ->
-                    p.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
-                }.collect(Collectors.toList()) as ArrayList<PackageInfo>
-            }
-            SortConstant.USER -> {
-                apps = apps.stream().filter { p ->
-                    p.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
-                }.collect(Collectors.toList()) as ArrayList<PackageInfo>
-            }
-        }
-
-        var filteredList = arrayListOf<PackageInfo>()
-
-        if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.COMBINE_FLAGS)) { // Pretty special case, even I don't know what I did here
-            @Suppress("UNCHECKED_CAST")
-            filteredList.addAll((apps.clone() as ArrayList<PackageInfo>).stream().filter { p ->
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.DISABLED)) {
-                    if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.ENABLED)) {
-                        true
-                    } else {
-                        p.applicationInfo.enabled.invert()
-                    }
-                } else {
-                    true
-                } && if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.ENABLED)) {
-                    if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.DISABLED)) {
-                        true
-                    } else {
-                        p.applicationInfo.enabled
-                    }
-                } else {
-                    true
-                } && if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.APK)) {
-                    if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.SPLIT)) {
-                        true
-                    } else {
-                        p.applicationInfo.splitSourceDirs.isNullOrEmpty()
-                    }
-                } else {
-                    true
-                } && if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.SPLIT)) {
-                    if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.APK)) {
-                        true
-                    } else {
-                        p.applicationInfo.splitSourceDirs?.isNotEmpty() ?: false
-                    }
-                } else {
-                    true
-                } && if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.UNINSTALLED)) {
-                    p.applicationInfo.flags and ApplicationInfo.FLAG_INSTALLED == 0
-                } else {
-                    true
-                }
-            }.collect(Collectors.toList()) as ArrayList<PackageInfo>)
-        } else {
-            for (app in apps) {
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.DISABLED)) {
-                    if (app.applicationInfo.enabled.invert()) {
-                        if (!filteredList.contains(app)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.ENABLED)) {
-                    if (app.applicationInfo.enabled) {
-                        if (!filteredList.contains(app)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.APK)) {
-                    if (app.applicationInfo.splitSourceDirs.isNullOrEmpty()) {
-                        if (!filteredList.contains(app)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.SPLIT)) {
-                    if (app.applicationInfo.splitSourceDirs?.isNotEmpty() == true) {
-                        if (!filteredList.contains(app)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-
-                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.UNINSTALLED)) {
-                    if (app.applicationInfo.flags and ApplicationInfo.FLAG_INSTALLED == 0) {
-                        if (!filteredList.contains(app)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-            }
-
-            // Remove duplicate elements
-            filteredList = filteredList.stream().distinct().collect(Collectors.toList()) as ArrayList<PackageInfo>
-        }
-
-        filteredList.getSortedList(SearchPreferences.getSortStyle(), SearchPreferences.isReverseSorting())
-
-        for (app in filteredList) {
-            val searchModel = SearchModel()
-
-            searchModel.packageInfo = app
-            searchModel.permissions = getPermissionCount(keywords, app)
-            searchModel.activities = getActivitiesCount(keywords, app)
-            searchModel.services = getServicesCount(keywords, app)
-            searchModel.receivers = getReceiversCount(keywords, app)
-            searchModel.providers = getProvidersCount(keywords, app)
-            searchModel.resources = getResourcesCount(keywords, app)
-
-            list.add(searchModel)
-        }
-
-        // Filter out apps with no results
-
-        list = list.filter {
-            it.permissions > 0 || it.activities > 0 || it.services > 0 ||
-                    it.receivers > 0 || it.providers > 0 || it.resources > 0 ||
-                    it.packageInfo.applicationInfo.name.contains(keywords, SearchPreferences.isCasingIgnored()) ||
-                    it.packageInfo.packageName.contains(keywords, SearchPreferences.isCasingIgnored())
-        } as ArrayList<SearchModel>
-
-        if (Thread.currentThread().name == thread?.name) {
-            deepSearchData.postValue(list)
-        }
+    private fun hasMatchingNames(search: Search, keywords: String): Boolean {
+        return search.packageInfo.safeApplicationInfo.name.contains(keywords, SearchPreferences.isCasingIgnored()) ||
+                search.packageInfo.packageName.contains(keywords, SearchPreferences.isCasingIgnored())
     }
 
     private fun loadTags() {
         viewModelScope.launch(Dispatchers.IO) {
-            val tagsDatabase = TagsDatabase.getInstance(application.applicationContext)
+            val tagsDatabase = TagsDatabase.getInstance(applicationContext())
             tags.postValue(tagsDatabase?.getTagDao()?.getTagsNameOnly()?.toArrayList() ?: arrayListOf())
         }
     }
 
-    private fun getPermissionCount(keyword: String, app: PackageInfo): Int {
-        var count = 0
+    private suspend fun ArrayList<Search>.addDeepSearchData(keywords: String, deepSearchData: ArrayList<PackageInfo>) = coroutineScope {
+        try {
+            deepSearchData.map { packageInfo ->
+                async {
+                    ensureActive()
 
-        kotlin.runCatching {
-            if (app.requestedPermissions != null) {
-                for (permission in app.requestedPermissions) {
-                    if (permission.lowercase().contains(keyword.lowercase())
-                        || permission.getPermissionInfo(application)?.loadLabel(application.packageManager)
-                            .toString().lowercase().contains(keyword.lowercase())) {
-                        count = count.inc()
+                    /**
+                     * I think parcel has a limit of how much data it can pass at once without crashing
+                     * so I'm using a semaphore to limit the matching to [MAX_PARALLEL_STREAMS] at a time.
+                     */
+                    semaphore.withPermit {
+                        try {
+                            val search = Search()
+                            ensureActive()
+
+                            search.packageInfo = packageInfo
+                            search.permissions = packageInfo.requestedPermissions
+                                ?.getMatchedCount(keywords, SearchPreferences.isCasingIgnored()) { it!! } ?: 0
+                            search.activities = packageInfo.activities
+                                ?.getMatchedCount(keywords, SearchPreferences.isCasingIgnored()) { it?.name!! } ?: 0
+                            search.services = packageInfo.services
+                                ?.getMatchedCount(keywords, SearchPreferences.isCasingIgnored()) { it?.name!! } ?: 0
+                            search.receivers = packageInfo.receivers
+                                ?.getMatchedCount(keywords, SearchPreferences.isCasingIgnored()) { it?.name!! } ?: 0
+                            search.providers = packageInfo.providers
+                                ?.getMatchedCount(keywords, SearchPreferences.isCasingIgnored()) { it?.name!! } ?: 0
+                            search.resources = packageInfo.getMatchedResourcesSize(keywords, SearchPreferences.isCasingIgnored())
+
+                            addIfNotExists(search, comparator = { a, b ->
+                                a?.packageInfo?.packageName == b?.packageInfo?.packageName
+                            })
+                        } catch (e: NameNotFoundException) {
+                            Log.e(TAG, e.stackTraceToString())
+                        }
+                    }
+                }
+            }.awaitAll()
+        } catch (e: ConcurrentModificationException) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun loadDataForDeepSearch(list: ArrayList<PackageInfo>) {
+        list.forEach {
+            kotlin.runCatching {
+                val packageInfo = packageManager.getPackageInfo(it.packageName, FLAGS)
+                packageInfo.safeApplicationInfo.name = it.safeApplicationInfo.name
+                deepPackageInfos.addIfNotExists(packageInfo, comparator = { a, b -> a?.packageName == b?.packageName })
+            }.getOrElse {
+                Log.e(TAG, it.stackTraceToString())
+            }
+        }
+    }
+
+    private suspend fun ArrayList<PackageInfo>.applyFilters(filtered: ArrayList<PackageInfo>) = coroutineScope {
+        map { app ->
+            ensureActive()
+
+            async {
+                ensureActive()
+
+                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.DISABLED)) {
+                    if (app.safeApplicationInfo.enabled.invert()) {
+                        if (app.isInstalled()) {
+                            filtered.addIfNotExists(app, comparator = { a, b -> a?.packageName == b?.packageName })
+                        }
+                    }
+                }
+
+                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.ENABLED)) {
+                    if (app.safeApplicationInfo.enabled) {
+                        if (app.isInstalled()) {
+                            filtered.addIfNotExists(app, comparator = { a, b -> a?.packageName == b?.packageName })
+                        }
+                    }
+                }
+
+                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.APK)) {
+                    if (app.safeApplicationInfo.splitSourceDirs.isNullOrEmpty()) {
+                        filtered.addIfNotExists(app, comparator = { a, b -> a?.packageName == b?.packageName })
+                    }
+                }
+
+                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.SPLIT)) {
+                    if (app.safeApplicationInfo.splitSourceDirs?.isNotEmpty() == true) {
+                        filtered.addIfNotExists(app, comparator = { a, b -> a?.packageName == b?.packageName })
+                    }
+                }
+
+                if (FlagUtils.isFlagSet(SearchPreferences.getAppsFilter(), SortConstant.UNINSTALLED)) {
+                    if (app.isInstalled().invert()) {
+                        filtered.addIfNotExists(app, comparator = { a, b -> a?.packageName == b?.packageName })
+                    }
+                }
+            }
+        }.awaitAll()
+    }
+
+    private fun ArrayList<PackageInfo>.filterCategories(keywords: String): ArrayList<PackageInfo> {
+        when {
+            keywords.startsWith("#") -> {
+                val tagsDatabase = TagsDatabase.getInstance(applicationContext())
+                val tag = keywords.split(" ")[0].substring(1)
+                val tagApps = tagsDatabase?.getTagDao()?.getTag(tag)?.packages?.split(",")
+
+                return parallelStream().filter { packageInfo ->
+                    tagApps?.contains(packageInfo.packageName) == true
+                }.collect(Collectors.toList()) as ArrayList<PackageInfo>
+            }
+            else -> {
+                when (SearchPreferences.getAppsCategory()) {
+                    SortConstant.SYSTEM -> {
+                        return parallelStream().filter { packageInfo ->
+                            packageInfo.isSystemApp()
+                        }.collect(Collectors.toList()) as ArrayList<PackageInfo>
+                    }
+                    SortConstant.USER -> {
+                        return parallelStream().filter { packageInfo ->
+                            packageInfo.isSystemApp().invert()
+                        }.collect(Collectors.toList()) as ArrayList<PackageInfo>
                     }
                 }
             }
         }
 
-        return count
-    }
-
-    private fun getActivitiesCount(keywords: String, app: PackageInfo): Int {
-        var count = 0
-
-        kotlin.runCatching {
-            if (app.activities != null) {
-                for (i in app.activities) {
-                    if (i.name.lowercase().contains(keywords.lowercase())) {
-                        count = count.inc()
-                    }
-                }
-            }
-        }
-
-        return count
-    }
-
-    private fun getServicesCount(keywords: String, app: PackageInfo): Int {
-        var count = 0
-
-        kotlin.runCatching {
-            if (app.services != null) {
-                for (i in app.services) {
-                    if (i.name.lowercase().contains(keywords.lowercase())) {
-                        count = count.inc()
-                    }
-                }
-            }
-        }
-
-        return count
-    }
-
-    private fun getReceiversCount(keywords: String, app: PackageInfo): Int {
-        var count = 0
-
-        kotlin.runCatching {
-            if (app.receivers != null) {
-                for (i in app.receivers) {
-                    if (i.name.lowercase().contains(keywords.lowercase())) {
-                        count = count.inc()
-                    }
-                }
-            }
-        }
-
-        return count
-    }
-
-    private fun getProvidersCount(keywords: String, app: PackageInfo): Int {
-        var count = 0
-
-        kotlin.runCatching {
-            if (app.providers != null) {
-                for (i in app.providers) {
-                    if (i.name.lowercase().contains(keywords.lowercase())) {
-                        count = count.inc()
-                    }
-                }
-            }
-        }
-
-        return count
-    }
-
-    private fun getResourcesCount(keywords: String, app: PackageInfo): Int {
-        var count = 0
-
-        kotlin.runCatching {
-            with(APKParser.getXmlFiles(app.applicationInfo.sourceDir, keywords)) {
-                count = count()
-            }
-        }
-
-        return count
+        return this
     }
 
     override fun onAppsLoaded(apps: ArrayList<PackageInfo>) {
         super.onAppsLoaded(apps)
-        initiateSearch(SearchPreferences.getLastSearchKeyword())
+        initiateSearch(searchKeywords.value ?: SearchPreferences.getLastSearchKeyword())
     }
 
     override fun onAppUninstalled(packageName: String?) {
@@ -511,13 +294,49 @@ class SearchViewModel(application: Application) : PackageUtilsViewModel(applicat
     override fun onCleared() {
         super.onCleared()
         try {
-            thread?.interrupt()
+            searchJobs.forEach { it.cancel() }
         } catch (e: IllegalStateException) {
             e.printStackTrace()
         }
     }
 
     fun clearSearch() {
-        initiateSearch("")
+        searchKeywords.postValue("")
+        searchData.postValue(arrayListOf())
+
+        try {
+            searchJobs.forEach { it.cancel() }
+        } catch (e: IllegalStateException) {
+            e.printStackTrace()
+        }
+    }
+
+    companion object {
+        @Suppress("DEPRECATION")
+        private var FLAGS = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.N -> {
+                PackageManager.GET_META_DATA or
+                        PackageManager.GET_PERMISSIONS or
+                        PackageManager.GET_ACTIVITIES or
+                        PackageManager.GET_SERVICES or
+                        PackageManager.GET_RECEIVERS or
+                        PackageManager.GET_PROVIDERS or
+                        PackageManager.MATCH_UNINSTALLED_PACKAGES or
+                        PackageManager.MATCH_DISABLED_COMPONENTS
+            }
+            else -> {
+                PackageManager.GET_META_DATA or
+                        PackageManager.GET_PERMISSIONS or
+                        PackageManager.GET_ACTIVITIES or
+                        PackageManager.GET_SERVICES or
+                        PackageManager.GET_RECEIVERS or
+                        PackageManager.GET_PROVIDERS or
+                        PackageManager.GET_UNINSTALLED_PACKAGES or
+                        PackageManager.GET_DISABLED_COMPONENTS
+            }
+        }
+
+        private const val TAG = "SearchViewModel"
+        private const val MAX_PARALLEL_STREAMS = 10
     }
 }

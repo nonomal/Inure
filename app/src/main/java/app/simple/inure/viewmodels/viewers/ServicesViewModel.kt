@@ -10,9 +10,11 @@ import androidx.lifecycle.viewModelScope
 import app.simple.inure.R
 import app.simple.inure.apk.utils.MetaUtils
 import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.WrappedViewModel
 import app.simple.inure.models.ServiceInfoModel
 import app.simple.inure.preferences.SearchPreferences
+import app.simple.inure.util.TrackerUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -36,10 +38,10 @@ class ServicesViewModel(application: Application, private val packageInfo: Packa
         viewModelScope.launch(Dispatchers.Default) {
             kotlin.runCatching {
                 val list = arrayListOf<ServiceInfoModel>()
-                val signatures: Array<String> = context.resources.getStringArray(R.array.trackers)
+                val signatures = TrackerUtils.getTrackerSignatures()
                 val isInstalled = packageManager.isPackageInstalled(packageInfo.packageName)
 
-                for (info in getPackageInfo(isInstalled).services) {
+                for (info in getPackageInfo(isInstalled).services!!) {
                     val serviceInfoModel = ServiceInfoModel()
 
                     serviceInfoModel.serviceInfo = info
@@ -47,7 +49,7 @@ class ServicesViewModel(application: Application, private val packageInfo: Packa
                     serviceInfoModel.isExported = info.exported
                     serviceInfoModel.flags = info.flags
                     serviceInfoModel.foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) info.foregroundServiceType else -3
-                    serviceInfoModel.permissions = info.permission ?: application.getString(R.string.no_permissions_required)
+                    serviceInfoModel.permissions = info.permission ?: getString(R.string.no_permissions_required)
 
                     for (signature in signatures) {
                         if (serviceInfoModel.serviceInfo.name!!.contains(signature)) {
@@ -58,9 +60,9 @@ class ServicesViewModel(application: Application, private val packageInfo: Packa
 
                     with(StringBuilder()) {
                         append(" | ")
-                        append(MetaUtils.getForegroundServiceType(serviceInfoModel.foregroundType, application))
+                        append(MetaUtils.getForegroundServiceType(serviceInfoModel.foregroundType, applicationContext()))
                         append(" | ")
-                        append(MetaUtils.getServiceFlags(info.flags, application))
+                        append(MetaUtils.getServiceFlags(info.flags, applicationContext()))
 
                         serviceInfoModel.status = this.toString()
                     }
@@ -96,7 +98,7 @@ class ServicesViewModel(application: Application, private val packageInfo: Packa
                                               PackageManager.GET_SERVICES or PackageManager.GET_DISABLED_COMPONENTS)!!
             }
         } else {
-            packageManager.getPackageArchiveInfo(packageInfo.applicationInfo.sourceDir,
+            packageManager.getPackageArchiveInfo(packageInfo.safeApplicationInfo.sourceDir,
                                                  PackageManager.GET_SERVICES or PackageManager.GET_DISABLED_COMPONENTS)!!
         }
     }

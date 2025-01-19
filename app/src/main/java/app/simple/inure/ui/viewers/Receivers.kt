@@ -9,15 +9,18 @@ import android.view.ViewGroup
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterReceivers
+import app.simple.inure.adapters.viewers.AdapterReceivers
 import app.simple.inure.constants.BundleConstants
+import app.simple.inure.constants.Warnings
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.dialogs.action.ComponentState
+import app.simple.inure.dialogs.action.ComponentState.Companion.showComponentStateDialog
 import app.simple.inure.extensions.fragments.SearchBarScopedFragment
 import app.simple.inure.extensions.popup.PopupMenuCallback
 import app.simple.inure.factories.panels.PackageInfoFactory
 import app.simple.inure.models.ActivityInfoModel
 import app.simple.inure.popups.viewers.PopupReceiversMenu
+import app.simple.inure.preferences.ConfigurationPreferences
 import app.simple.inure.preferences.ReceiversPreferences
 import app.simple.inure.ui.subviewers.ActivityInfo
 import app.simple.inure.viewmodels.viewers.ReceiversViewModel
@@ -52,36 +55,40 @@ class Receivers : SearchBarScopedFragment() {
 
         receiversViewModel.getReceivers().observe(viewLifecycleOwner) {
             adapterReceivers = AdapterReceivers(it, packageInfo, searchBox.text.toString().trim())
-            recyclerView.adapter = adapterReceivers
+            setCount(it.size)
 
             adapterReceivers?.setOnReceiversCallbackListener(object : AdapterReceivers.Companion.ReceiversCallbacks {
                 override fun onReceiverClicked(activityInfoModel: ActivityInfoModel) {
-                    openFragmentSlide(ActivityInfo.newInstance(activityInfoModel, packageInfo), "activity_info")
+                    openFragmentSlide(ActivityInfo.newInstance(activityInfoModel, packageInfo), ActivityInfo.TAG)
                 }
 
                 override fun onReceiverLongPressed(packageId: String, packageInfo: PackageInfo, icon: View, isComponentEnabled: Boolean, position: Int) {
-                    PopupReceiversMenu(icon, isComponentEnabled).setOnMenuClickListener(object : PopupMenuCallback {
-                        override fun onMenuItemClicked(source: String) {
-                            when (source) {
-                                getString(R.string.enable), getString(R.string.disable) -> {
-                                    val componentState = ComponentState.newInstance(packageInfo, packageId, isComponentEnabled)
-                                    componentState.setOnComponentStateChangeListener(object : ComponentState.Companion.ComponentStatusCallbacks {
-                                        override fun onSuccess() {
-                                            adapterReceivers?.notifyItemChanged(position)
-                                        }
-                                    })
-                                    componentState.show(childFragmentManager, "component_state")
+                    if (ConfigurationPreferences.isRootOrShizuku()) {
+                        PopupReceiversMenu(icon, isComponentEnabled).setOnMenuClickListener(object : PopupMenuCallback {
+                            override fun onMenuItemClicked(source: String) {
+                                when (source) {
+                                    getString(R.string.enable), getString(R.string.disable) -> {
+                                        showComponentStateDialog(packageInfo, packageId, isComponentEnabled, object : ComponentState.Companion.ComponentStatusCallbacks {
+                                            override fun onSuccess() {
+                                                adapterReceivers?.notifyItemChanged(position)
+                                            }
+                                        })
+                                    }
                                 }
                             }
-                        }
-                    })
+                        })
+                    } else {
+                        showWarning(Warnings.ROOT_OR_SHIZUKU_REQUIRED, false)
+                    }
                 }
             })
 
-            searchBox.doOnTextChanged { text, _, _, _ ->
-                if (searchBox.isFocused) {
-                    receiversViewModel.getReceiversData(text.toString().trim())
-                }
+            recyclerView.setExclusiveAdapter(adapterReceivers)
+        }
+
+        searchBox.doOnTextChanged { text, _, _, _ ->
+            if (searchBox.isFocused) {
+                receiversViewModel.getReceiversData(text.toString().trim())
             }
         }
 
@@ -104,7 +111,7 @@ class Receivers : SearchBarScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            ReceiversPreferences.receiversSearch -> {
+            ReceiversPreferences.RECEIVERS_SEARCH -> {
                 searchBoxState(animate = true, ReceiversPreferences.isSearchVisible())
             }
         }
@@ -119,5 +126,7 @@ class Receivers : SearchBarScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "receivers"
     }
 }

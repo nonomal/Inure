@@ -10,9 +10,11 @@ import androidx.lifecycle.viewModelScope
 import app.simple.inure.R
 import app.simple.inure.apk.utils.MetaUtils
 import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.WrappedViewModel
 import app.simple.inure.models.ActivityInfoModel
 import app.simple.inure.preferences.SearchPreferences
+import app.simple.inure.util.TrackerUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -36,17 +38,17 @@ class ReceiversViewModel(application: Application, val packageInfo: PackageInfo)
         viewModelScope.launch(Dispatchers.Default) {
             kotlin.runCatching {
                 val list = arrayListOf<ActivityInfoModel>()
-                val signatures: Array<String> = context.resources.getStringArray(R.array.trackers)
+                val signatures = TrackerUtils.getTrackerSignatures()
                 val isInstalled = packageManager.isPackageInstalled(packageInfo.packageName)
 
-                for (ai in getPackageInfo(isInstalled).receivers) {
+                for (ai in getPackageInfo(isInstalled).receivers!!) {
                     val activityInfoModel = ActivityInfoModel()
 
                     activityInfoModel.activityInfo = ai
                     activityInfoModel.name = ai.name
-                    activityInfoModel.target = ai.targetActivity ?: application.getString(R.string.not_available)
+                    activityInfoModel.target = ai.targetActivity ?: getString(R.string.not_available)
                     activityInfoModel.exported = ai.exported
-                    activityInfoModel.permission = ai.permission ?: application.getString(R.string.no_permissions_required)
+                    activityInfoModel.permission = ai.permission ?: getString(R.string.no_permissions_required)
 
                     for (signature in signatures) {
                         if (ai.name!!.contains(signature)) {
@@ -57,9 +59,9 @@ class ReceiversViewModel(application: Application, val packageInfo: PackageInfo)
 
                     with(StringBuilder()) {
                         append(" | ")
-                        append(MetaUtils.getLaunchMode(ai.launchMode, application))
+                        append(MetaUtils.getLaunchMode(ai.launchMode, applicationContext()))
                         append(" | ")
-                        append(MetaUtils.getOrientation(ai.screenOrientation, application))
+                        append(MetaUtils.getOrientation(ai.screenOrientation, applicationContext()))
                         activityInfoModel.status = this.toString()
                     }
 
@@ -94,7 +96,7 @@ class ReceiversViewModel(application: Application, val packageInfo: PackageInfo)
                                               PackageManager.GET_RECEIVERS or PackageManager.GET_DISABLED_COMPONENTS)!!
             }
         } else {
-            packageManager.getPackageArchiveInfo(packageInfo.applicationInfo.sourceDir,
+            packageManager.getPackageArchiveInfo(packageInfo.safeApplicationInfo.sourceDir,
                                                  PackageManager.GET_RECEIVERS or PackageManager.GET_DISABLED_COMPONENTS)!!
         }
     }

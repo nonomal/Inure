@@ -7,14 +7,14 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterFeatures
+import app.simple.inure.adapters.viewers.AdapterFeatures
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
-import app.simple.inure.extensions.fragments.ScopedFragment
+import app.simple.inure.extensions.fragments.SearchBarScopedFragment
 import app.simple.inure.factories.panels.PackageInfoFactory
 import app.simple.inure.viewmodels.viewers.ApkDataViewModel
 
-class Features : ScopedFragment() {
+class Features : SearchBarScopedFragment() {
 
     private lateinit var recyclerView: CustomVerticalRecyclerView
     private lateinit var componentsViewModel: ApkDataViewModel
@@ -37,6 +37,7 @@ class Features : ScopedFragment() {
 
         componentsViewModel.getFeatures().observe(viewLifecycleOwner) {
             recyclerView.adapter = AdapterFeatures(it)
+            setCount(it.count())
         }
 
         componentsViewModel.getError().observe(viewLifecycleOwner) {
@@ -56,5 +57,7 @@ class Features : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "Features"
     }
 }

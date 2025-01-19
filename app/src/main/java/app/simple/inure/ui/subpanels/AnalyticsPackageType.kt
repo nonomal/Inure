@@ -15,9 +15,9 @@ import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.decorations.ripple.DynamicRippleImageButton
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.CustomProgressBar
-import app.simple.inure.dialogs.menus.AppsMenu
+import app.simple.inure.dialogs.app.AppMenu
 import app.simple.inure.extensions.fragments.ScopedFragment
-import app.simple.inure.factories.subpanels.AnalyticsSDKViewModelFactory
+import app.simple.inure.factories.subpanels.AnalyticsViewModelFactory
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
 import app.simple.inure.util.ParcelUtils.parcelable
 import app.simple.inure.util.ViewUtils.gone
@@ -29,6 +29,7 @@ class AnalyticsPackageType : ScopedFragment() {
 
     private lateinit var back: DynamicRippleImageButton
     private lateinit var title: TypeFaceTextView
+    private lateinit var count: TypeFaceTextView
     private lateinit var loader: CustomProgressBar
     private lateinit var recyclerView: CustomVerticalRecyclerView
     private lateinit var analyticsDataViewModel: AnalyticsDataViewModel
@@ -38,10 +39,11 @@ class AnalyticsPackageType : ScopedFragment() {
 
         back = view.findViewById(R.id.back_button)
         title = view.findViewById(R.id.sdk_name)
+        count = view.findViewById(R.id.count)
         loader = view.findViewById(R.id.loader)
         recyclerView = view.findViewById(R.id.recycler_view)
-        val analyticsSDKViewModelFactory = AnalyticsSDKViewModelFactory(requireArguments().parcelable(BundleConstants.entry)!!)
-        analyticsDataViewModel = ViewModelProvider(this, analyticsSDKViewModelFactory)[AnalyticsDataViewModel::class.java]
+        val analyticsViewModelFactory = AnalyticsViewModelFactory(requireArguments().parcelable(BundleConstants.entry)!!)
+        analyticsDataViewModel = ViewModelProvider(this, analyticsViewModelFactory)[AnalyticsDataViewModel::class.java]
 
         return view
     }
@@ -49,7 +51,7 @@ class AnalyticsPackageType : ScopedFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        if (analyticsDataViewModel.getAnalyticsData().value != null) {
+        if (analyticsDataViewModel.getMinimumSDKData().value != null) {
             postponeEnterTransition()
         } else {
             startPostponedEnterTransition()
@@ -61,8 +63,9 @@ class AnalyticsPackageType : ScopedFragment() {
             popBackStack()
         }
 
-        analyticsDataViewModel.getAnalyticsData().observe(viewLifecycleOwner) {
+        analyticsDataViewModel.getPackageTypeData().observe(viewLifecycleOwner) {
             loader.gone(animate = true)
+            count.text = getString(R.string.total_apps, it.size)
             val analyticsDataAdapter = AnalyticsDataAdapter(it)
 
             analyticsDataAdapter.setOnAdapterCallbacks(object : AdapterCallbacks {
@@ -71,7 +74,7 @@ class AnalyticsPackageType : ScopedFragment() {
                 }
 
                 override fun onAppLongPressed(packageInfo: PackageInfo, icon: ImageView) {
-                    AppsMenu.newInstance(packageInfo)
+                    AppMenu.newInstance(packageInfo)
                         .show(childFragmentManager, "apps_menu")
                 }
             })
@@ -92,5 +95,7 @@ class AnalyticsPackageType : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "AnalyticsPackageType"
     }
 }

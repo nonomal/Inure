@@ -43,7 +43,7 @@ open class TransparentBaseActivity : AppCompatActivity(), ThemeChangedListener {
             presetMaterialYouDynamicColors()
 
             if (AppearancePreferences.isMaterialYouAccent()) {
-                AppearancePreferences.setAccentColor(ContextCompat.getColor(baseContext, MaterialYou.materialYouAccentResID))
+                AppearancePreferences.setAccentColor(ContextCompat.getColor(baseContext, MaterialYou.MATERIAL_YOU_ACCENT_RES_ID))
             }
         }
 
@@ -59,7 +59,7 @@ open class TransparentBaseActivity : AppCompatActivity(), ThemeChangedListener {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
 
-        if (!DevelopmentPreferences.get(DevelopmentPreferences.disableTransparentStatus)) {
+        if (!DevelopmentPreferences.get(DevelopmentPreferences.DISABLE_TRANSPARENT_STATUS)) {
             makeAppFullScreen()
             // fixNavigationBarOverlap()
         }
@@ -121,6 +121,7 @@ open class TransparentBaseActivity : AppCompatActivity(), ThemeChangedListener {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun setNavColor() {
         if (AppearancePreferences.isAccentOnNavigationBar()) {
             window.navigationBarColor = theme.obtainStyledAttributes(intArrayOf(R.attr.colorAppAccent))

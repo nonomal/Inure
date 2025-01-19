@@ -7,12 +7,13 @@ import android.os.Build
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import app.simple.inure.R
 import app.simple.inure.apk.utils.MetaUtils
 import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.WrappedViewModel
 import app.simple.inure.models.ProviderInfoModel
 import app.simple.inure.preferences.SearchPreferences
+import app.simple.inure.util.TrackerUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -38,9 +39,9 @@ class ProvidersViewModel(application: Application, val packageInfo: PackageInfo)
                 val list = arrayListOf<ProviderInfoModel>()
                 val isInstalled = packageManager.isPackageInstalled(packageInfo.packageName)
 
-                for (pi in getPackageInfo(isInstalled).providers) {
+                for (pi in getPackageInfo(isInstalled).providers!!) {
                     val providerInfoModel = ProviderInfoModel()
-                    val signatures: Array<String> = context.resources.getStringArray(R.array.trackers)
+                    val signatures = TrackerUtils.getTrackerSignatures()
 
                     providerInfoModel.providerInfo = pi
                     providerInfoModel.name = pi.name
@@ -57,7 +58,7 @@ class ProvidersViewModel(application: Application, val packageInfo: PackageInfo)
 
                     with(StringBuilder()) {
                         append(" | ")
-                        append(MetaUtils.getServiceFlags(pi.flags, application))
+                        append(MetaUtils.getServiceFlags(pi.flags, applicationContext()))
 
                         providerInfoModel.status = this.toString()
                     }
@@ -93,7 +94,7 @@ class ProvidersViewModel(application: Application, val packageInfo: PackageInfo)
                                               PackageManager.GET_PROVIDERS or PackageManager.GET_DISABLED_COMPONENTS)!!
             }
         } else {
-            packageManager.getPackageArchiveInfo(packageInfo.applicationInfo.sourceDir,
+            packageManager.getPackageArchiveInfo(packageInfo.safeApplicationInfo.sourceDir,
                                                  PackageManager.GET_PROVIDERS or PackageManager.GET_DISABLED_COMPONENTS)!!
         }
     }

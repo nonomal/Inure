@@ -28,8 +28,11 @@ import app.simple.inure.util.ViewUtils;
 
 public class DynamicRippleImageButton extends ThemeButton {
     
+    private int rippleColor = -1;
+    
     public DynamicRippleImageButton(Context context, AttributeSet attrs) {
         super(context, attrs);
+        rippleColor = AppearancePreferences.INSTANCE.getAccentColor();
         setBackgroundColor(Color.TRANSPARENT);
     
         setOnLongClickListener(view -> {
@@ -134,7 +137,7 @@ public class DynamicRippleImageButton extends ThemeButton {
             setBackgroundTintList(ColorStateList.valueOf(ThemeManager.INSTANCE.getTheme().getViewGroupTheme().getHighlightBackground()));
         } else {
             setBackground(null);
-            setBackground(Utils.getRippleDrawable(getBackground(), Misc.roundedCornerFactor));
+            setBackground(Utils.getCustomRippleDrawable(getBackground(), rippleColor, Misc.roundedCornerFactor));
         }
     }
     
@@ -158,7 +161,7 @@ public class DynamicRippleImageButton extends ThemeButton {
             setBackgroundTintList(null);
             setBackgroundTintList(ColorStateList.valueOf(ColorUtils.INSTANCE.changeAlpha(
                     ColorUtils.INSTANCE.resolveAttrColor(getContext(), R.attr.colorAppAccent),
-                    25)));
+                    Misc.highlightColorAlpha)));
             
             LayoutBackground.setBackground(getContext(), this, null);
         } else {
@@ -167,9 +170,14 @@ public class DynamicRippleImageButton extends ThemeButton {
         }
     }
     
+    public void setRippleColor(int rippleColor) {
+        this.rippleColor = rippleColor;
+        setHighlightBackgroundColor();
+    }
+    
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        if (Objects.equals(key, AppearancePreferences.accentColor)) {
+        if (Objects.equals(key, AppearancePreferences.ACCENT_COLOR)) {
             setHighlightBackgroundColor();
         }
     }

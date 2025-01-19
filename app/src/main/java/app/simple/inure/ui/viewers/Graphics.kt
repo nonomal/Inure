@@ -9,12 +9,14 @@ import android.view.ViewGroup
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterGraphics
+import app.simple.inure.adapters.viewers.AdapterGraphics
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.decorations.ripple.DynamicRippleImageButton
 import app.simple.inure.extensions.fragments.SearchBarScopedFragment
 import app.simple.inure.factories.panels.PackageInfoFactory
+import app.simple.inure.models.Graphic
 import app.simple.inure.popups.viewers.PopupGraphicsMenu
 import app.simple.inure.preferences.DevelopmentPreferences
 import app.simple.inure.preferences.GraphicsPreferences
@@ -51,20 +53,22 @@ class Graphics : SearchBarScopedFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         graphicsViewModel.getGraphics().observe(viewLifecycleOwner) {
+            setCount(it.size)
+
             if (recyclerView.adapter.isNull()) {
-                adapterGraphics = AdapterGraphics(packageInfo.applicationInfo.sourceDir, it, searchBox.text.toString().trim())
+                adapterGraphics = AdapterGraphics(packageInfo.safeApplicationInfo.sourceDir, it, searchBox.text.toString().trim())
                 recyclerView.adapter = adapterGraphics
 
                 adapterGraphics!!.setOnResourceClickListener(object : AdapterGraphics.GraphicsCallbacks {
-                    override fun onGraphicsClicked(path: String, filePath: String, view: ViewGroup, xOff: Float, yOff: Float) {
-                        openFragmentSlide(ImageViewer.newInstance(packageInfo.applicationInfo.sourceDir, filePath), "image_viewer")
+                    override fun onGraphicsClicked(path: String, graphics: Graphic, view: ViewGroup, xOff: Float, yOff: Float) {
+                        openFragmentSlide(Image.newInstance(packageInfo.safeApplicationInfo.sourceDir, graphics.path), Image.TAG)
                     }
 
-                    override fun onGraphicsLongPressed(filePath: String) {
-                        if (DevelopmentPreferences.get(DevelopmentPreferences.isWebViewXmlViewer)) {
-                            openFragmentSlide(XMLViewerWebView.newInstance(packageInfo, false, filePath), "wv_xml")
+                    override fun onGraphicsLongPressed(graphic: Graphic) {
+                        if (DevelopmentPreferences.get(DevelopmentPreferences.IS_WEBVIEW_XML_VIEWER)) {
+                            openFragmentSlide(XMLWebView.newInstance(packageInfo, graphic.path), XMLWebView.TAG)
                         } else {
-                            openFragmentSlide(XMLViewerTextView.newInstance(packageInfo, false, filePath), "tv_xml")
+                            openFragmentSlide(XML.newInstance(packageInfo, false, graphic.path), XML.TAG)
                         }
                     }
                 })
@@ -102,7 +106,7 @@ class Graphics : SearchBarScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            GraphicsPreferences.graphicsSearch -> {
+            GraphicsPreferences.GRAPHICS_SEARCH -> {
                 searchBoxState(animate = true, GraphicsPreferences.isSearchVisible())
             }
         }
@@ -121,5 +125,7 @@ class Graphics : SearchBarScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "Graphics"
     }
 }

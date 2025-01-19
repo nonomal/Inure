@@ -16,3 +16,8 @@ local.properties
 /app/github/release/
 /app/play/release/
 /app/beta/release/
+/app/github/debug/
+/.idea/deploymentTargetDropDown.xml
+/scripts/secrets.txt
+/.kotlin/sessions/
+/.kotlin/errors/

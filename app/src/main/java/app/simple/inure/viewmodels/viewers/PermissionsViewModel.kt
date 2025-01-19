@@ -9,6 +9,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.R
 import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.apk.utils.PermissionUtils.getPermissionInfo
 import app.simple.inure.extensions.viewmodels.WrappedViewModel
 import app.simple.inure.models.PermissionInfo
@@ -16,13 +17,14 @@ import app.simple.inure.preferences.SearchPreferences
 import app.simple.inure.util.StringUtils.capitalizeFirstLetter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.util.*
+import java.util.Locale
 
 class PermissionsViewModel(application: Application, val packageInfo: PackageInfo) : WrappedViewModel(application) {
 
     private val permissions: MutableLiveData<MutableList<PermissionInfo>> by lazy {
         MutableLiveData<MutableList<PermissionInfo>>().also {
             if (SearchPreferences.isSearchKeywordModeEnabled()) {
+                Log.d("PermissionsViewModel", "Loading permission data with keyword: ${SearchPreferences.getLastSearchKeyword()}")
                 loadPermissionData(SearchPreferences.getLastSearchKeyword())
             } else {
                 loadPermissionData("")
@@ -41,40 +43,38 @@ class PermissionsViewModel(application: Application, val packageInfo: PackageInf
                 val appPackageInfo = if (packageManager.isPackageInstalled(packageInfo.packageName)) {
                     packageManager.getPackageInfo(packageInfo.packageName, PackageManager.GET_PERMISSIONS)!!
                 } else {
-                    packageManager.getPackageArchiveInfo(packageInfo.applicationInfo.sourceDir, PackageManager.GET_PERMISSIONS)!!
+                    packageManager.getPackageArchiveInfo(packageInfo.safeApplicationInfo.sourceDir, PackageManager.GET_PERMISSIONS)!!
                 }
 
                 val permissions = arrayListOf<PermissionInfo>()
 
-                for (count in appPackageInfo.requestedPermissions.indices) {
+                for (count in appPackageInfo.requestedPermissions?.indices!!) {
                     val permissionInfo = PermissionInfo()
 
                     kotlin.runCatching {
-                        permissionInfo.permissionInfo = appPackageInfo.requestedPermissions[count].getPermissionInfo(context)
+                        permissionInfo.permissionInfo = appPackageInfo.requestedPermissions!![count].getPermissionInfo(context)
                         permissionInfo.label = permissionInfo.permissionInfo!!.loadLabel(context.packageManager).toString().capitalizeFirstLetter()
-                        Log.d("Permission", permissionInfo.label)
 
-                        if (isKeywordMatched(keyword, appPackageInfo.requestedPermissions[count], permissionInfo.label)) {
-                            if (appPackageInfo.requestedPermissionsFlags[count] and PackageInfo.REQUESTED_PERMISSION_GRANTED != 0) {
+                        if (isKeywordMatched(keyword, appPackageInfo.requestedPermissions!![count], permissionInfo.label)) {
+                            if (appPackageInfo.requestedPermissionsFlags!![count] and PackageInfo.REQUESTED_PERMISSION_GRANTED != 0) {
                                 permissionInfo.isGranted = 1
                             } else {
                                 permissionInfo.isGranted = 0
                             }
-                            permissionInfo.name = appPackageInfo.requestedPermissions[count]
+                            permissionInfo.name = appPackageInfo.requestedPermissions!![count]
                             permissions.add(permissionInfo)
                         }
                     }.onFailure {
                         permissionInfo.permissionInfo = null
-                        permissionInfo.label = appPackageInfo.requestedPermissions[count]
-                        Log.d("Permission", permissionInfo.label)
+                        permissionInfo.label = appPackageInfo.requestedPermissions!![count]
 
-                        if (isKeywordMatched(keyword, appPackageInfo.requestedPermissions[count])) {
-                            if (appPackageInfo.requestedPermissionsFlags[count] and PackageInfo.REQUESTED_PERMISSION_GRANTED != 0) {
+                        if (isKeywordMatched(keyword, appPackageInfo.requestedPermissions!![count])) {
+                            if (appPackageInfo.requestedPermissionsFlags!![count] and PackageInfo.REQUESTED_PERMISSION_GRANTED != 0) {
                                 permissionInfo.isGranted = 1
                             } else {
                                 permissionInfo.isGranted = 0
                             }
-                            permissionInfo.name = appPackageInfo.requestedPermissions[count]
+                            permissionInfo.name = appPackageInfo.requestedPermissions!![count]
                             permissions.add(permissionInfo)
                         }
                     }
@@ -86,7 +86,7 @@ class PermissionsViewModel(application: Application, val packageInfo: PackageInf
                 val requestedPermissions = appPackageInfo.requestedPermissions.toMutableList()
 
                 try {
-                    ApkFile(packageInfo.applicationInfo.sourceDir).use { apkFile ->
+                    ApkFile(packageInfo.safeApplicationInfo.sourceDir).use { apkFile ->
                         try {
                             apkFile.apkMeta.permissions.forEach { permission ->
                                 if (permission.name !in requestedPermissions) {

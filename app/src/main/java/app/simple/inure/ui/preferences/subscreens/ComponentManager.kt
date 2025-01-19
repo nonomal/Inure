@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.lifecycle.lifecycleScope
 import app.simple.inure.R
+import app.simple.inure.activities.alias.TermHere
 import app.simple.inure.activities.association.ApkInstallerActivity
 import app.simple.inure.activities.association.AppInformationActivity
 import app.simple.inure.activities.association.AudioPlayerActivity
@@ -14,7 +15,7 @@ import app.simple.inure.activities.association.InformationActivity
 import app.simple.inure.activities.association.ManifestAssociationActivity
 import app.simple.inure.activities.association.TTFViewerActivity
 import app.simple.inure.activities.association.TextViewerActivity
-import app.simple.inure.adapters.preferences.AdapterComponentManager
+import app.simple.inure.adapters.preferences.AdapterComponentsManager
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.extensions.fragments.ScopedFragment
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,7 @@ class ComponentManager : ScopedFragment() {
                     Triple(R.mipmap.ic_launcher, R.string.manifest, ManifestAssociationActivity::class.java),
                     Triple(R.mipmap.ic_launcher, R.string.text_viewer, TextViewerActivity::class.java),
                     Triple(R.mipmap.ic_launcher, R.string.ttf_viewer, TTFViewerActivity::class.java),
+                    Triple(R.mipmap.ic_terminal, R.string.activity_term_here_title, TermHere::class.java),
                     // Triple(R.mipmap.ic_terminal, R.string.execute, BashAssociation::class.java),
             )
 
@@ -56,7 +58,7 @@ class ComponentManager : ScopedFragment() {
             }
 
             withContext(Dispatchers.Main) {
-                recyclerView.adapter = AdapterComponentManager(list)
+                recyclerView.adapter = AdapterComponentsManager(list)
             }
         }
     }
@@ -68,5 +70,7 @@ class ComponentManager : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "ComponentManager"
     }
 }

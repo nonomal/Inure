@@ -11,12 +11,18 @@ object SortConstant {
     const val ASCENDING = "ascending"
     const val DESCENDING = "descending"
 
-    const val DISABLED = 1
-    const val ENABLED = 2
-    const val APK = 4
-    const val SPLIT = 8
-    const val UNINSTALLED = 16
-    const val COMBINE_FLAGS = 32
+    const val FILTER_STYLE_AND = "filter_style_and"
+    const val FILTER_STYLE_OR = "filter_style_or"
+
+    const val DISABLED = 1 shl 1
+    const val ENABLED = 1 shl 2
+    const val APK = 1 shl 3
+    const val SPLIT = 1 shl 4
+    const val UNINSTALLED = 1 shl 5
+    const val FOSS = 1 shl 6
+    const val LARGE_HEAP = 1 shl 7
+    const val LAUNCHABLE = 1 shl 8
+    const val STOPPED = 1 shl 9
     const val ALL = DISABLED or ENABLED or APK or SPLIT
 
     const val CATEGORY_UNSPECIFIED = 1L shl 1
@@ -64,7 +70,18 @@ object SortConstant {
     const val BATCH_NOT_SELECTED = 2
     const val BATCH_ENABLED = 4
     const val BATCH_DISABLED = 8
-    const val ALL_BATCH_STATES = BATCH_SELECTED or BATCH_NOT_SELECTED or BATCH_ENABLED or BATCH_DISABLED
+    const val BATCH_UNINSTALLED = 16
+    const val BATCH_FOSS = 32
+    const val BATCH_APK = 64
+    const val BATCH_SPLIT = 128
+    const val ALL_BATCH_STATES = BATCH_SELECTED or
+            BATCH_NOT_SELECTED or
+            BATCH_ENABLED or
+            BATCH_DISABLED or
+            BATCH_UNINSTALLED or
+            BATCH_FOSS or
+            BATCH_APK or
+            BATCH_SPLIT
 
     const val BOOT_ENABLED = 1
     const val BOOT_DISABLED = 2

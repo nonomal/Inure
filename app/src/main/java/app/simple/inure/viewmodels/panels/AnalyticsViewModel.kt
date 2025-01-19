@@ -1,19 +1,28 @@
 package app.simple.inure.viewmodels.panels
 
 import android.app.Application
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
+import android.content.pm.PackageManager.NameNotFoundException
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.R
+import app.simple.inure.apk.utils.PackageUtils.getInstallerPackageName
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
+import app.simple.inure.constants.Colors
+import app.simple.inure.constants.InstallerColors
+import app.simple.inure.constants.SortConstant
 import app.simple.inure.extensions.viewmodels.PackageUtilsViewModel
 import app.simple.inure.preferences.AnalyticsPreferences
-import app.simple.inure.util.SDKHelper
+import app.simple.inure.util.ConditionUtils.isNotZero
+import app.simple.inure.util.SDKUtils
 import com.github.mikephil.charting.data.PieEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.stream.Collectors
 
 class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(application) {
 
@@ -25,12 +34,12 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>>()
     }
 
-    private val installLocationData: MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>> by lazy {
+    private val packageTypeData: MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>> by lazy {
         MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>>()
     }
 
-    private val packageTypeData: MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>> by lazy {
-        MutableLiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>>()
+    private val installerData: MutableLiveData<Triple<ArrayList<PieEntry>, ArrayList<Int>, HashMap<String, String>>> by lazy {
+        MutableLiveData<Triple<ArrayList<PieEntry>, ArrayList<Int>, HashMap<String, String>>>()
     }
 
     fun getMinimumOsData(): LiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>> {
@@ -41,12 +50,12 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         return targetOsData
     }
 
-    fun getInstallLocationData(): LiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>> {
-        return installLocationData
-    }
-
     fun getPackageTypeData(): LiveData<Pair<ArrayList<PieEntry>, ArrayList<Int>>> {
         return packageTypeData
+    }
+
+    fun getInstallerData(): LiveData<Triple<ArrayList<PieEntry>, ArrayList<Int>, HashMap<String, String>>> {
+        return installerData
     }
 
     @RequiresApi(Build.VERSION_CODES.N)
@@ -54,20 +63,23 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         viewModelScope.launch(Dispatchers.IO) {
             val data = arrayListOf<PieEntry>()
             val colors = arrayListOf<Int>()
+            val isSdkCode = AnalyticsPreferences.getSDKValue()
 
-            // TODO - improve this code
-            for (sdkCode in 1..SDKHelper.totalSDKs) {
+            for (sdkCode in 1..SDKUtils.TOTAL_SDKS) {
                 var total = 0F
+
                 for (app in apps) {
-                    val sdk = app.applicationInfo.minSdkVersion
+                    val sdk = app.safeApplicationInfo.minSdkVersion
                     if (sdk == sdkCode) {
                         ++total
                     }
                 }
 
-                if (total != 0F) { // Filter empty data
-                    data.add(PieEntry(total, if (AnalyticsPreferences.getSDKValue()) SDKHelper.getSdkCode(sdkCode) else SDKHelper.getSdkTitle(sdkCode)))
-                    colors.add(SDKHelper.getSdkColor(sdkCode, applicationContext()))
+                if (total.isNotZero()) { // Filter empty data
+                    val sdk = if (isSdkCode) SDKUtils.getSdkCode(sdkCode) else SDKUtils.getSdkTitle(sdkCode)
+
+                    data.add(PieEntry(total, sdk))
+                    colors.add(SDKUtils.getSdkColor(sdkCode, applicationContext()))
                 }
             }
 
@@ -79,20 +91,23 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         viewModelScope.launch(Dispatchers.IO) {
             val data = arrayListOf<PieEntry>()
             val colors = arrayListOf<Int>()
+            val isSdkCode = AnalyticsPreferences.getSDKValue()
 
-            // TODO - improve this code
-            for (sdkCode in 1..SDKHelper.totalSDKs) {
+            for (sdkCode in 1..SDKUtils.TOTAL_SDKS) {
                 var total = 0F
+
                 for (app in apps) {
-                    val sdk = app.applicationInfo.targetSdkVersion
+                    val sdk = app.safeApplicationInfo.targetSdkVersion
                     if (sdk == sdkCode) {
-                        ++total
+                        total = total.inc()
                     }
                 }
 
-                if (total != 0F) { // Filter empty data
-                    data.add(PieEntry(total, if (AnalyticsPreferences.getSDKValue()) SDKHelper.getSdkCode(sdkCode) else SDKHelper.getSdkTitle(sdkCode)))
-                    colors.add(SDKHelper.getSdkColor(sdkCode, applicationContext()))
+                if (total.isNotZero()) { // Filter empty data
+                    val sdk = if (isSdkCode) SDKUtils.getSdkCode(sdkCode) else SDKUtils.getSdkTitle(sdkCode)
+
+                    data.add(PieEntry(total, sdk))
+                    colors.add(SDKUtils.getSdkColor(sdkCode, applicationContext()))
                 }
             }
 
@@ -100,64 +115,101 @@ class AnalyticsViewModel(application: Application) : PackageUtilsViewModel(appli
         }
     }
 
-    private fun loadInstallLocationData(apps: ArrayList<PackageInfo>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val data = arrayListOf<PieEntry>()
-            val colors = arrayListOf<Int>()
-
-            var internal = 0F
-            var external = 0F
-            var auto = 0F
-            var unspecified = 0F
-
-            for (app in apps) {
-                when (app.installLocation) {
-                    PackageInfo.INSTALL_LOCATION_AUTO -> auto++
-                    PackageInfo.INSTALL_LOCATION_INTERNAL_ONLY -> internal++
-                    PackageInfo.INSTALL_LOCATION_PREFER_EXTERNAL -> external++
-                    -1 -> unspecified++
-                }
-            }
-
-            if (internal != 0F) data.add(PieEntry(internal, getString(R.string.internal)))
-            if (external != 0F) data.add(PieEntry(external, getString(R.string.prefer_external)))
-            if (auto != 0F) data.add(PieEntry(auto, getString(R.string.auto)))
-            if (unspecified != 0F) data.add(PieEntry(unspecified, getString(R.string.unspecified)))
-
-            installLocationData.postValue(Pair(data, colors))
-        }
-    }
-
     private fun loadPackageTypeData(apps: ArrayList<PackageInfo>) {
         viewModelScope.launch(Dispatchers.IO) {
             val data = arrayListOf<PieEntry>()
             val colors = arrayListOf<Int>()
-
             var split = 0F
             var apk = 0F
 
             for (app in apps) {
-                if (app.applicationInfo.splitSourceDirs.isNullOrEmpty()) {
-                    apk++
+                if (app.safeApplicationInfo.splitSourceDirs.isNullOrEmpty()) {
+                    apk = apk.inc()
                 } else {
-                    split++
+                    split = split.inc()
                 }
             }
 
-            if (split != 0F) data.add(PieEntry(split, getString(R.string.split_packages)))
-            if (apk != 0F) data.add(PieEntry(apk, getString(R.string.apk)))
+            if (split.isNotZero()) data.add(PieEntry(split, getString(R.string.split_packages)))
+            if (apk.isNotZero()) data.add(PieEntry(apk, getString(R.string.apk)))
 
             packageTypeData.postValue(Pair(data, colors))
         }
     }
 
-    override fun onAppsLoaded(apps: ArrayList<PackageInfo>) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            loadMinimumOsData(apps)
+    private fun loadInstallerData(apps: ArrayList<PackageInfo>) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val data = arrayListOf<PieEntry>()
+            val colors = arrayListOf<Int>()
+            val installers = hashMapOf<String, Int>()
+            val labels = hashMapOf<String, String>()
+
+            for (app in apps) {
+                try {
+                    val installer = app.getInstallerPackageName(applicationContext())
+
+                    if (installer != null) {
+                        if (installers.containsKey(installer)) {
+                            installers[installer] = installers[installer]!!.inc()
+                        } else {
+                            installers[installer] = 1
+                        }
+                    } else {
+                        if (installers.containsKey(getString(R.string.unknown))) {
+                            installers[getString(R.string.unknown)] = installers[getString(R.string.unknown)]!!.inc()
+                        } else {
+                            installers[getString(R.string.unknown)] = 1
+                        }
+                    }
+                } catch (e: NameNotFoundException) {
+                    e.printStackTrace()
+                }
+            }
+
+            for (installer in installers) {
+                data.add(PieEntry(installer.value.toFloat(), installer.key))
+            }
+
+            installers.keys.distinct().forEach { packageName ->
+                colors.add(InstallerColors.getInstallerColorMap()[packageName]
+                               ?: Colors.getRetroColor()[installers.keys.distinct().indexOf(packageName)])
+                labels[packageName] = kotlin.runCatching {
+                    packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName)!!).toString()
+                }.getOrElse {
+                    packageName
+                }
+            }
+
+            installerData.postValue(Triple(data, colors, labels))
         }
-        loadTargetOsData(apps)
-        loadInstallLocationData(apps)
-        loadPackageTypeData(apps)
+    }
+
+    override fun onAppsLoaded(apps: ArrayList<PackageInfo>) {
+        val filteredApps = filterAppsByType(apps)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            loadMinimumOsData(filteredApps)
+        }
+
+        loadTargetOsData(filteredApps)
+        loadPackageTypeData(filteredApps)
+        loadInstallerData(filteredApps)
+    }
+
+    private fun filterAppsByType(apps: ArrayList<PackageInfo>): ArrayList<PackageInfo> {
+        return when (AnalyticsPreferences.getApplicationType()) {
+            SortConstant.SYSTEM -> {
+                apps.parallelStream().filter { packageInfo ->
+                    packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
+                }.collect(Collectors.toList()) as ArrayList<PackageInfo>
+            }
+            SortConstant.USER -> {
+                apps.parallelStream().filter { packageInfo ->
+                    packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
+                }.collect(Collectors.toList()) as ArrayList<PackageInfo>
+            }
+            else -> apps
+        }
     }
 
     override fun onAppUninstalled(packageName: String?) {

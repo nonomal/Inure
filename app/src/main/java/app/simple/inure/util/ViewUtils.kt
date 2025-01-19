@@ -90,7 +90,7 @@ object ViewUtils {
      *                    shadow
      */
     fun addShadow(contentView: View) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && BehaviourPreferences.areColoredShadowsOn()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && BehaviourPreferences.isColoredShadow()) {
             contentView.outlineAmbientShadowColor = AppearancePreferences.getAccentColor()
             contentView.outlineSpotShadowColor = AppearancePreferences.getAccentColor()
         }
@@ -104,9 +104,36 @@ object ViewUtils {
         this.visibility = View.GONE
     }
 
+    fun View.slideUpGone() {
+        animate()
+            .translationY(-height.times(3).toFloat())
+            .alpha(0F)
+            .scaleX(0F)
+            .scaleY(0F)
+            .setInterpolator(DecelerateInterpolator())
+            .setDuration(resources.getInteger(R.integer.animation_duration).toLong())
+            .setListener(object : Animator.AnimatorListener {
+                override fun onAnimationStart(animation: Animator) {
+                    /* no-op */
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    this@slideUpGone.gone()
+                }
+
+                override fun onAnimationCancel(animation: Animator) {
+                    /* no-op */
+                }
+
+                override fun onAnimationRepeat(animation: Animator) {
+                    /* no-op */
+                }
+            })
+            .start()
+    }
+
     fun View.gone(animate: Boolean) {
         if (animate) {
-            clearAnimation()
             this.animate()
                 .scaleY(0F)
                 .scaleX(0F)
@@ -120,6 +147,7 @@ object ViewUtils {
 
                     override fun onAnimationEnd(animation: Animator) {
                         this@gone.visibility = View.GONE
+                        clearAnimation()
                     }
 
                     override fun onAnimationCancel(animation: Animator) {
@@ -130,6 +158,41 @@ object ViewUtils {
                         /* no-op */
                     }
                 })
+                .start()
+        } else {
+            this.visibility = View.GONE
+        }
+    }
+
+    fun View.gone(animate: Boolean, onEnd: () -> Unit) {
+        if (animate) {
+            this.animate()
+                .scaleY(0F)
+                .scaleX(0F)
+                .alpha(0F)
+                .setInterpolator(AccelerateInterpolator())
+                .setDuration(this.resources.getInteger(R.integer.animation_duration).toLong())
+                .setListener(object : Animator.AnimatorListener {
+                    override fun onAnimationStart(animation: Animator) {
+                        /* no-op */
+                    }
+
+                    override fun onAnimationEnd(animation: Animator) {
+                        this@gone.visibility = View.GONE
+                        clearAnimation()
+                    }
+
+                    override fun onAnimationCancel(animation: Animator) {
+                        /* no-op */
+                    }
+
+                    override fun onAnimationRepeat(animation: Animator) {
+                        /* no-op */
+                    }
+                })
+                .withEndAction {
+                    onEnd()
+                }
                 .start()
         } else {
             this.visibility = View.GONE
@@ -178,7 +241,7 @@ object ViewUtils {
      *
      * @param animate adds animation to the process
      */
-    fun View.visible(animate: Boolean) {
+    fun View.visible(animate: Boolean = false) {
         if (visibility == View.VISIBLE) return
 
         if (animate) {
@@ -210,6 +273,14 @@ object ViewUtils {
                 .start()
         } else {
             this.visibility = View.VISIBLE
+        }
+    }
+
+    fun View.visibility(isVisible: Boolean) {
+        visibility = if (isVisible) {
+            View.VISIBLE
+        } else {
+            View.GONE
         }
     }
 
@@ -288,9 +359,8 @@ object ViewUtils {
         } else {
             if (height == 0 || width == 0) {
                 var onLayoutChangeListener: View.OnLayoutChangeListener? = null
-                val onGlobalLayoutListener: ViewTreeObserver.OnGlobalLayoutListener?
 
-                onGlobalLayoutListener = object : ViewTreeObserver.OnGlobalLayoutListener {
+                val onGlobalLayoutListener: ViewTreeObserver.OnGlobalLayoutListener = object : ViewTreeObserver.OnGlobalLayoutListener {
                     override fun onGlobalLayout() {
                         if (isShown) {
                             removeOnLayoutChangeListener(onLayoutChangeListener)
@@ -327,7 +397,7 @@ object ViewUtils {
     fun View.triggerHover(event: MotionEvent) {
         if (isClickable) {
             if (!AccessibilityPreferences.isAnimationReduced()) {
-                if (DevelopmentPreferences.get(DevelopmentPreferences.hoverAnimation)) {
+                if (DevelopmentPreferences.get(DevelopmentPreferences.HOVER_ANIMATION)) {
                     if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
                         animate()
                             .scaleX(Misc.hoverAnimationScaleOnHover)
@@ -373,5 +443,25 @@ object ViewUtils {
                 /* no-op */
             }
         })
+    }
+
+    fun ViewGroup.setPaddingLeft(padding: Int) {
+        setPadding(padding, paddingTop, paddingRight, paddingBottom)
+    }
+
+    fun ViewGroup.setPaddingRight(padding: Int) {
+        setPadding(paddingLeft, paddingTop, padding, paddingBottom)
+    }
+
+    fun ViewGroup.setPaddingTop(padding: Int) {
+        setPadding(paddingLeft, padding, paddingRight, paddingBottom)
+    }
+
+    fun ViewGroup.setPaddingBottom(padding: Int) {
+        setPadding(paddingLeft, paddingTop, paddingRight, padding)
+    }
+
+    fun ViewGroup.defaultPadding() {
+        setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom)
     }
 }

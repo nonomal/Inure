@@ -3,11 +3,20 @@ package app.simple.inure.apk.utils
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
+import android.content.pm.ServiceInfo
+import android.content.pm.verify.domain.DomainVerificationManager
+import android.content.pm.verify.domain.DomainVerificationUserState
+import android.os.Build
 import android.view.WindowManager
+import androidx.annotation.RequiresApi
 import app.simple.inure.R
+import app.simple.inure.util.FlagUtils
 import app.simple.inure.util.StringUtils.createString
 
 object MetaUtils {
+
+    private const val FOREGROUND_SERVICE_TYPE_FILE_MANAGEMENT = 1 shl 12
+
     fun getLaunchMode(mode: Int, context: Context): String {
         return when (mode) {
             ActivityInfo.LAUNCH_MULTIPLE -> context.getString(R.string.multiple)
@@ -68,20 +77,106 @@ object MetaUtils {
         return builder.toString()
     }
 
+    /**
+     * This method is used to get the foreground service type
+     * @param type The type of the foreground service
+     * @param context The context of the application
+     * @return The string representation of the foreground service type
+     *
+     * FOREGROUND_SERVICE_TYPE_MANIFEST,
+     * FOREGROUND_SERVICE_TYPE_NONE,
+     * FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+     * FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+     * FOREGROUND_SERVICE_TYPE_PHONE_CALL,
+     * FOREGROUND_SERVICE_TYPE_LOCATION,
+     * FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+     * FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION,
+     * FOREGROUND_SERVICE_TYPE_CAMERA,
+     * FOREGROUND_SERVICE_TYPE_MICROPHONE,
+     * FOREGROUND_SERVICE_TYPE_HEALTH,
+     * FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING,
+     * FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED,
+     * FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
+     * FOREGROUND_SERVICE_TYPE_FILE_MANAGEMENT,
+     * FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+     */
     fun getForegroundServiceType(type: Int, context: Context): String {
         val builder = StringBuilder()
 
         with(builder) {
             if (type == 0) createString(context.getString(R.string.non_foreground))
-            if ((1 shl 0 and type) == 1 shl 0) createString(context.getString(R.string.data_sync))
-            if ((1 shl 1 and type) == 1 shl 1) createString(context.getString(R.string.media_playback))
-            if ((1 shl 2 and type) == 1 shl 2) createString(context.getString(R.string.phone_call))
-            if ((1 shl 3 and type) == 1 shl 3) createString(context.getString(R.string.location))
-            if ((1 shl 4 and type) == 1 shl 4) createString(context.getString(R.string.connected_devices))
-            if ((1 shl 5 and type) == 1 shl 5) createString(context.getString(R.string.media_projection))
-            if ((1 shl 6 and type) == 1 shl 6) createString(context.getString(R.string.camera))
-            if ((1 shl 7 and type) == 1 shl 7) createString(context.getString(R.string.microphone))
-            if ((1 shl -1 and type) == 1 shl -1) createString(context.getString(R.string.manifest))
+
+            if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)) {
+                createString(context.getString(R.string.camera))
+            }
+
+            if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)) {
+                createString(context.getString(R.string.location))
+            }
+
+            if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)) {
+                createString(context.getString(R.string.microphone))
+            }
+
+            if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)) {
+                createString(context.getString(R.string.media_projection))
+            }
+
+            if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)) {
+                createString(context.getString(R.string.media_playback))
+            }
+
+            if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)) {
+                createString(context.getString(R.string.phone_call))
+            }
+
+            if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)) {
+                createString(context.getString(R.string.data_sync))
+            }
+
+            if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)) {
+                createString(context.getString(R.string.connected_devices))
+            }
+
+            if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_MANIFEST)) {
+                createString(context.getString(R.string.manifest))
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH)) {
+                    createString(context.getString(R.string.health))
+                }
+
+                if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING)) {
+                    createString(context.getString(R.string.remote_messaging))
+                }
+
+                if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)) {
+                    createString(context.getString(R.string.system_exempted))
+                }
+
+                if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)) {
+                    createString(context.getString(R.string.short_service))
+                }
+
+                if (FlagUtils.isFlagSet(type, FOREGROUND_SERVICE_TYPE_FILE_MANAGEMENT)) {
+                    createString(context.getString(R.string.file_management))
+                }
+
+                if (FlagUtils.isFlagSet(type, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)) {
+                    createString(context.getString(R.string.special_use))
+                }
+            }
+
+            //            if ((1 shl 0 and type) == 1 shl 0) createString(context.getString(R.string.data_sync))
+            //            if ((1 shl 1 and type) == 1 shl 1) createString(context.getString(R.string.media_playback))
+            //            if ((1 shl 2 and type) == 1 shl 2) createString(context.getString(R.string.phone_call))
+            //            if ((1 shl 3 and type) == 1 shl 3) createString(context.getString(R.string.location))
+            //            if ((1 shl 4 and type) == 1 shl 4) createString(context.getString(R.string.connected_devices))
+            //            if ((1 shl 5 and type) == 1 shl 5) createString(context.getString(R.string.media_projection))
+            //            if ((1 shl 6 and type) == 1 shl 6) createString(context.getString(R.string.camera))
+            //            if ((1 shl 7 and type) == 1 shl 7) createString(context.getString(R.string.microphone))
+            //            if ((1 shl -1 and type) == 1 shl -1) createString(context.getString(R.string.manifest))
         }
 
         return builder.toString()
@@ -230,5 +325,33 @@ object MetaUtils {
         }
 
         return builder.toString()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    fun Context.hasDefaultLinks(packageName: String): Boolean {
+        kotlin.runCatching {
+            val manager = getSystemService(DomainVerificationManager::class.java)
+            val userState = manager.getDomainVerificationUserState(packageName)
+
+            // Domains that have passed Android App Links verification.
+            val verifiedDomains = userState?.hostToStateMap
+                ?.filterValues { it == DomainVerificationUserState.DOMAIN_STATE_VERIFIED }
+
+            // Domains that haven't passed Android App Links verification but that the user
+            // has associated with an app.
+            val selectedDomains = userState?.hostToStateMap
+                ?.filterValues { it == DomainVerificationUserState.DOMAIN_STATE_SELECTED }
+
+            // All other domains.
+            val unapprovedDomains = userState?.hostToStateMap
+                ?.filterValues { it == DomainVerificationUserState.DOMAIN_STATE_NONE }
+
+            return listOf(verifiedDomains, selectedDomains, unapprovedDomains).any {
+                it?.isNotEmpty() == true
+            }
+        }.getOrElse {
+            it.printStackTrace()
+            return false
+        }
     }
 }

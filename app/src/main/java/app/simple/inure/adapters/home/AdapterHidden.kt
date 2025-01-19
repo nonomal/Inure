@@ -9,8 +9,9 @@ import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
 import app.simple.inure.apk.parsers.FOSSParser
 import app.simple.inure.apk.utils.PackageUtils.getApplicationInstallTime
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
+import app.simple.inure.decorations.condensed.CondensedDynamicRippleConstraintLayout
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
-import app.simple.inure.decorations.ripple.DynamicRippleConstraintLayout
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.AppIconImageView
 import app.simple.inure.glide.modules.GlideApp
@@ -45,12 +46,12 @@ class AdapterHidden(var apps: ArrayList<PackageInfo> = arrayListOf()) : Recycler
 
         if (holder is Holder) {
             holder.icon.transitionName = apps[position].packageName
-            holder.icon.loadAppIcon(apps[position].packageName, apps[position].applicationInfo.enabled)
-            holder.name.text = apps[position].applicationInfo.name
+            holder.icon.loadAppIcon(apps[position].packageName, apps[position].safeApplicationInfo.enabled)
+            holder.name.text = apps[position].safeApplicationInfo.name
             holder.packageId.text = apps[position].packageName
 
-            holder.name.setStrikeThru(apps[position].applicationInfo.enabled)
-            holder.name.setFOSSIcon(FOSSParser.isPackageFOSS(apps[position].packageName))
+            holder.name.setStrikeThru(apps[position].safeApplicationInfo.enabled)
+            holder.name.setFOSSIcon(FOSSParser.isPackageFOSS(apps[position]))
 
             holder.date.text = apps[position].getApplicationInstallTime(holder.itemView.context, FormattingPreferences.getDateFormat())
 
@@ -97,7 +98,7 @@ class AdapterHidden(var apps: ArrayList<PackageInfo> = arrayListOf()) : Recycler
         val name: TypeFaceTextView = itemView.findViewById(R.id.adapter_recently_app_name)
         val packageId: TypeFaceTextView = itemView.findViewById(R.id.adapter_recently_app_package_id)
         val date: TypeFaceTextView = itemView.findViewById(R.id.adapter_recently_date)
-        val container: DynamicRippleConstraintLayout = itemView.findViewById(R.id.adapter_recently_container)
+        val container: CondensedDynamicRippleConstraintLayout = itemView.findViewById(R.id.adapter_recently_container)
     }
 
     inner class Header(itemView: View) : VerticalListViewHolder(itemView) {

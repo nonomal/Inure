@@ -78,9 +78,9 @@ class RoundedCorner : ScopedBottomSheetFragment() {
 
     private fun updateBackground(radius: Float) {
         val shapeAppearanceModel = ShapeAppearanceModel()
-                .toBuilder()
-                .setAllCorners(CornerFamily.ROUNDED, radius)
-                .build()
+            .toBuilder()
+            .setAllCorners(CornerFamily.ROUNDED, radius)
+            .build()
 
         cornerFrameLayout.background = MaterialShapeDrawable(shapeAppearanceModel)
     }
@@ -92,5 +92,7 @@ class RoundedCorner : ScopedBottomSheetFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "RoundedCorner"
     }
 }

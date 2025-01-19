@@ -1,7 +1,7 @@
 package app.simple.inure.adapters.preferences
 
+import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.RippleDrawable
 import android.graphics.drawable.ShapeDrawable
@@ -10,14 +10,15 @@ import android.os.Build
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
+import app.simple.inure.constants.Misc
 import app.simple.inure.decorations.corners.DynamicCornerAccentColor
+import app.simple.inure.decorations.corners.DynamicCornerMaterialCardView
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
 import app.simple.inure.decorations.ripple.Utils
 import app.simple.inure.decorations.theme.ThemeIcon
+import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.preferences.AppearancePreferences
 import app.simple.inure.preferences.AppearancePreferences.getCornerRadius
 import app.simple.inure.themes.data.MaterialYou
@@ -25,7 +26,7 @@ import app.simple.inure.util.ColorUtils.toHexColor
 import app.simple.inure.util.ConditionUtils.isZero
 import app.simple.inure.util.RecyclerViewUtils.TYPE_HEADER
 import app.simple.inure.util.RecyclerViewUtils.TYPE_ITEM
-import java.util.*
+import java.util.Arrays
 
 class AdapterAccentColor(private val list: ArrayList<Pair<Int, String>>) : RecyclerView.Adapter<VerticalListViewHolder>() {
 
@@ -46,57 +47,66 @@ class AdapterAccentColor(private val list: ArrayList<Pair<Int, String>>) : Recyc
         }
     }
 
-    override fun onBindViewHolder(holder: VerticalListViewHolder, position_: Int) {
+    override fun onBindViewHolder(holder: VerticalListViewHolder, position: Int) {
 
-        val position = holder.absoluteAdapterPosition - 1
+        val position1 = holder.bindingAdapterPosition - 1
 
-        if (holder is Holder) {
-            holder.color.backgroundTintList = ColorStateList.valueOf(list[position].first)
+        when (holder) {
+            is Holder -> {
+                holder.color.backgroundTintList = ColorStateList.valueOf(list[position1].first)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                holder.color.outlineSpotShadowColor = list[position].first
-                holder.color.outlineAmbientShadowColor = list[position].first
-            }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    holder.color.outlineSpotShadowColor = list[position1].first
+                    holder.color.outlineAmbientShadowColor = list[position1].first
 
-            holder.container.setOnClickListener {
-                if (list[position].first == Color.DKGRAY) {
-                    accentColorCallbacks?.onAccentColorPicker()
-                } else {
-                    if (AppearancePreferences.setAccentColor(list[position].first)) {
-                        AppearancePreferences.setCustomColor(false)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            AppearancePreferences.setMaterialYouAccent(position == MaterialYou.materialYouAdapterIndex)
+                    holder.container.outlineSpotShadowColor = list[position1].first
+                    holder.container.outlineAmbientShadowColor = list[position1].first
+                }
+
+                holder.container.setOnClickListener {
+                    if (list[position1].second == holder.getString(R.string.color_picker)) {
+                        accentColorCallbacks?.onAccentColorPicker()
+                    } else {
+                        if (AppearancePreferences.setAccentColor(list[position1].first)) {
+                            if (AppearancePreferences.setCustomColor(false)) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    AppearancePreferences.setMaterialYouAccent(position1 == MaterialYou.MATERIAL_YOU_ADAPTER_INDEX)
+                                }
+                                notifyItemChanged(lastSelectedItem)
+                                notifyItemChanged(holder.bindingAdapterPosition)
+                                lastSelectedItem = holder.bindingAdapterPosition
+                            }
                         }
-                        notifyItemChanged(lastSelectedItem)
-                        notifyItemChanged(holder.absoluteAdapterPosition)
-                        lastSelectedItem = holder.absoluteAdapterPosition
+                    }
+                }
+
+                holder.name.text = list[position1].second
+                holder.hex.text = list[position1].first.toHexColor()
+
+                // holder.container.background = null
+                // holder.container.background = getRippleDrawable(holder.container.background, list[position1].first)
+                holder.container.rippleColor = ColorStateList.valueOf(list[position1].first)
+
+                if (AppearancePreferences.isCustomColor()) {
+                    holder.tick.visibility = if (list[position1].second == holder.getString(R.string.color_picker)) {
+                        lastSelectedItem = holder.bindingAdapterPosition
+                        View.VISIBLE
+                    } else {
+                        View.GONE
+                    }
+                } else {
+                    holder.tick.visibility = if (list[position1].first == AppearancePreferences.getAccentColor()) {
+                        lastSelectedItem = holder.bindingAdapterPosition
+                        View.VISIBLE
+                    } else {
+                        View.INVISIBLE
                     }
                 }
             }
-
-            holder.name.text = list[position].second
-            holder.hex.text = list[position].first.toHexColor()
-
-            holder.container.background = null
-            holder.container.background = getRippleDrawable(holder.container.background, list[position].first)
-
-            if (AppearancePreferences.isCustomColor()) {
-                holder.tick.visibility = if (list[position].first == Color.DKGRAY) {
-                    lastSelectedItem = holder.absoluteAdapterPosition
-                    View.VISIBLE
-                } else {
-                    View.INVISIBLE
-                }
-            } else {
-                holder.tick.visibility = if (list[position].first == AppearancePreferences.getAccentColor()) {
-                    lastSelectedItem = holder.absoluteAdapterPosition
-                    View.VISIBLE
-                } else {
-                    View.INVISIBLE
-                }
+            is Header -> {
+                holder.total.text = holder.itemView.context.getString(R.string.total, list.size)
+                holder.title.setTextColor(AppearancePreferences.getAccentColor())
             }
-        } else if (holder is Header) {
-            holder.total.text = holder.itemView.context.getString(R.string.total, list.size)
         }
     }
 
@@ -113,15 +123,17 @@ class AdapterAccentColor(private val list: ArrayList<Pair<Int, String>>) : Recyc
     inner class Holder(itemView: View) : VerticalListViewHolder(itemView) {
         val color: DynamicCornerAccentColor = itemView.findViewById(R.id.adapter_palette_color)
         val tick: ThemeIcon = itemView.findViewById(R.id.adapter_accent_check_icon)
-        val name: TextView = itemView.findViewById(R.id.color_name)
-        val hex: TextView = itemView.findViewById(R.id.color_hex)
-        val container: LinearLayout = itemView.findViewById(R.id.color_container)
+        val name: TypeFaceTextView = itemView.findViewById(R.id.color_name)
+        val hex: TypeFaceTextView = itemView.findViewById(R.id.color_hex)
+        val container: DynamicCornerMaterialCardView = itemView.findViewById(R.id.color_container)
     }
 
     inner class Header(itemView: View) : VerticalListViewHolder(itemView) {
-        val total: TextView = itemView.findViewById(R.id.adapter_accent_total)
+        val total: TypeFaceTextView = itemView.findViewById(R.id.adapter_accent_total)
+        val title: TypeFaceTextView = itemView.findViewById(R.id.title)
     }
 
+    @Suppress("unused")
     private fun getRippleDrawable(backgroundDrawable: Drawable?, color: Int): RippleDrawable {
         val outerRadii = FloatArray(8)
         val innerRadii = FloatArray(8)
@@ -139,13 +151,21 @@ class AdapterAccentColor(private val list: ArrayList<Pair<Int, String>>) : Recyc
         this.accentColorCallbacks = accentColorCallbacks
     }
 
-    fun updateAccentColor() {
+    fun updateAccentColor(context: Context) {
         if (AppearancePreferences.isCustomColor()) {
+            val position = Misc.COLOR_PICKER_INDEX
+            list[position] = Pair(AppearancePreferences.getPickedAccentColor(), context.getString(R.string.color_picker))
             notifyItemChanged(lastSelectedItem)
-            notifyItemChanged(list.find { it.first == Color.DKGRAY }?.let { list.indexOf(it) } ?: 0)
+            notifyItemChanged(position.plus(1))
         } else {
+            val position = list.find {
+                it.first == AppearancePreferences.getAccentColor()
+            }?.let {
+                list.indexOf(it)
+            } ?: 0
+
             notifyItemChanged(lastSelectedItem)
-            notifyItemChanged(list.find { it.first == AppearancePreferences.getAccentColor() }?.let { list.indexOf(it) } ?: 0)
+            notifyItemChanged(position)
         }
     }
 

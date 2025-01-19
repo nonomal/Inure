@@ -6,10 +6,10 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
-import app.simple.inure.apk.parsers.FOSSParser
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.SortConstant
+import app.simple.inure.decorations.condensed.CondensedDynamicRippleConstraintLayout
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
-import app.simple.inure.decorations.ripple.DynamicRippleConstraintLayout
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.AppIconImageView
 import app.simple.inure.glide.modules.GlideApp
@@ -17,8 +17,12 @@ import app.simple.inure.glide.util.ImageLoader.loadAppIcon
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
 import app.simple.inure.models.BootManagerModel
 import app.simple.inure.preferences.BootManagerPreferences
-import app.simple.inure.util.*
+import app.simple.inure.util.AdapterUtils.setAppVisualStates
 import app.simple.inure.util.ConditionUtils.invert
+import app.simple.inure.util.LocaleUtils
+import app.simple.inure.util.RecyclerViewUtils
+import app.simple.inure.util.SortBootManager
+import app.simple.inure.util.StatusBarHeight
 
 class AdapterBootManager(private val components: ArrayList<BootManagerModel>) : RecyclerView.Adapter<VerticalListViewHolder>() {
 
@@ -27,7 +31,7 @@ class AdapterBootManager(private val components: ArrayList<BootManagerModel>) : 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VerticalListViewHolder {
         return when (viewType) {
             RecyclerViewUtils.TYPE_HEADER -> {
-                if (LocaleHelper.isAppRussianLocale() && StatusBarHeight.isLandscape(parent.context).invert()) {
+                if (LocaleUtils.isAppRussianLocale() && StatusBarHeight.isLandscape(parent.context).invert()) {
                     Header(LayoutInflater.from(parent.context)
                                .inflate(R.layout.adapter_header_boot_manager_ru, parent, false))
                 } else {
@@ -52,10 +56,9 @@ class AdapterBootManager(private val components: ArrayList<BootManagerModel>) : 
         if (holder is Holder) {
             holder.icon.transitionName = components[position].packageInfo.packageName
             holder.icon.loadAppIcon(components[position].packageInfo.packageName, components[position].isEnabled)
-            holder.name.text = components[position].packageInfo.applicationInfo.name
+            holder.name.text = components[position].packageInfo.safeApplicationInfo.name
             holder.packageId.text = components[position].packageInfo.packageName
-            holder.name.setStrikeThru(components[position].isEnabled)
-            holder.name.setFOSSIcon(FOSSParser.isPackageFOSS(components[position].packageInfo.packageName))
+            holder.name.setAppVisualStates(components[position].packageInfo)
 
             holder.data.text = with(StringBuilder()) {
                 append(holder.context.getString(R.string.total, components[position].enabledComponents.size + components[position].disabledComponents.size))
@@ -168,7 +171,7 @@ class AdapterBootManager(private val components: ArrayList<BootManagerModel>) : 
         val name: TypeFaceTextView = itemView.findViewById(R.id.adapter_boot_app_name)
         val packageId: TypeFaceTextView = itemView.findViewById(R.id.adapter_boot_app_package_id)
         val data: TypeFaceTextView = itemView.findViewById(R.id.adapter_boot_data)
-        val container: DynamicRippleConstraintLayout = itemView.findViewById(R.id.adapter_boot_container)
+        val container: CondensedDynamicRippleConstraintLayout = itemView.findViewById(R.id.adapter_boot_container)
     }
 
     inner class Header(itemView: View) : VerticalListViewHolder(itemView) {

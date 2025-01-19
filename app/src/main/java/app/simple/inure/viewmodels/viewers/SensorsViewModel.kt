@@ -32,7 +32,7 @@ class SensorsViewModel(application: Application) : WrappedViewModel(application)
     private fun loadSensorData() {
         viewModelScope.launch(Dispatchers.IO) {
             kotlin.runCatching {
-                with(application.getSystemService(Context.SENSOR_SERVICE) as SensorManager) {
+                with(applicationContext().getSystemService(Context.SENSOR_SERVICE) as SensorManager) {
                     val list: MutableList<Sensor> = getSensorList(Sensor.TYPE_ALL).toMutableList()
 
                     list.getSortedList(SensorsPreferences.getSortStyle())
@@ -47,8 +47,8 @@ class SensorsViewModel(application: Application) : WrappedViewModel(application)
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            SensorsPreferences.isSortingReversed,
-            SensorsPreferences.sortStyle -> {
+            SensorsPreferences.IS_SORTING_REVERSED,
+            SensorsPreferences.SORT_STYLE -> {
                 loadSensorData()
             }
         }

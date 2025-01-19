@@ -5,7 +5,8 @@ import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
-import app.simple.inure.R
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
+import app.simple.inure.glide.util.GlideUtils.getGeneratedAppIconBitmap
 import app.simple.inure.util.BitmapHelper.toBitmap
 import app.simple.inure.util.BitmapHelper.toGrayscale
 import com.bumptech.glide.Priority
@@ -23,7 +24,7 @@ class AppIconFetcher internal constructor(private val appIcon: AppIcon) : DataFe
                 if (appIcon.enabled) {
                     callback.onDataReady(activityList.getIcon(0).toBitmap())
                 } else {
-                    callback.onDataReady(activityList.getIcon(0).toBitmap()?.toGrayscale())
+                    callback.onDataReady(activityList.getIcon(0).toBitmap().toGrayscale())
                 }
             }.onFailure {
                 // Loading proper icon failed, try loading default icon
@@ -37,32 +38,32 @@ class AppIconFetcher internal constructor(private val appIcon: AppIcon) : DataFe
                         callback.onDataReady(
                                 appIcon.context.packageManager
                                     .getApplicationIcon(appIcon.packageName)
-                                    .toBitmap()?.toGrayscale())
+                                    .toBitmap().toGrayscale())
                     }
                 }.onFailure {
                     // Loading default icon failed, load icon from APK
                     val p0 = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         appIcon.context.packageManager
-                            .getPackageArchiveInfo(appIcon.file?.absolutePath!!,
+                            .getPackageArchiveInfo(appIcon.file!!.absolutePath,
                                                    PackageManager.PackageInfoFlags.of(PackageManager.GET_META_DATA.toLong()))
                     } else {
                         @Suppress("DEPRECATION")
                         appIcon.context.packageManager
-                            .getPackageArchiveInfo(appIcon.file?.absolutePath!!,
+                            .getPackageArchiveInfo(appIcon.file!!.absolutePath,
                                                    PackageManager.GET_META_DATA)
                     }
-                    p0!!.applicationInfo.sourceDir = appIcon.file.absolutePath
-                    p0.applicationInfo.publicSourceDir = appIcon.file.absolutePath
-                    val b = appIcon.context.packageManager.getApplicationIcon(p0.applicationInfo)
-                    callback.onDataReady(b.toBitmap()?.toGrayscale())
+                    p0!!.safeApplicationInfo.sourceDir = appIcon.file.absolutePath
+                    p0.safeApplicationInfo.publicSourceDir = appIcon.file.absolutePath
+                    val b = appIcon.context.packageManager.getApplicationIcon(p0.safeApplicationInfo)
+                    callback.onDataReady(b.toBitmap().toGrayscale())
                 }
             }
         } catch (e: PackageManager.NameNotFoundException) {
-            callback.onDataReady(R.drawable.ic_app_icon.toBitmap(appIcon.context))
+            callback.onDataReady(appIcon.context.getGeneratedAppIconBitmap())
         } catch (e: NullPointerException) {
-            callback.onDataReady(R.drawable.ic_app_icon.toBitmap(appIcon.context))
+            callback.onDataReady(appIcon.context.getGeneratedAppIconBitmap())
         } catch (e: Exception) {
-            callback.onLoadFailed(e)
+            callback.onDataReady(appIcon.context.getGeneratedAppIconBitmap())
         }
     }
 
@@ -80,5 +81,9 @@ class AppIconFetcher internal constructor(private val appIcon: AppIcon) : DataFe
 
     override fun getDataSource(): DataSource {
         return DataSource.LOCAL
+    }
+
+    companion object {
+        private const val TAG = "AppIconFetcher"
     }
 }

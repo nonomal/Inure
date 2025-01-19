@@ -1,5 +1,7 @@
 package app.simple.inure.util
 
+import org.json.JSONArray
+
 object ArrayUtils {
     fun <E> ArrayList<E>.move(fromIndex: Int, toIndex: Int) {
         if (fromIndex >= size || fromIndex < 0) {
@@ -66,5 +68,75 @@ object ArrayUtils {
     fun <T> List<T>.clone(): ArrayList<T> {
         @Suppress("UNCHECKED_CAST")
         return this.toArrayList().clone() as ArrayList<T>
+    }
+
+    /**
+     * Split an [ArrayList] into multiple [ArrayList]s
+     * @param count number of [ArrayList]s to split into
+     */
+    fun <T> ArrayList<T>.split(count: Int): ArrayList<ArrayList<T>> {
+        val result = ArrayList<ArrayList<T>>()
+        var remainder = size % count
+        val size = size / count
+        var index = 0
+        for (i in 0 until count) {
+            val list = ArrayList<T>()
+            for (j in 0 until size) {
+                list.add(this[index])
+                index++
+            }
+            if (remainder > 0) {
+                list.add(this[index])
+                index++
+                remainder--
+            }
+            result.add(list)
+        }
+        return result
+    }
+
+    fun JSONArray.toStringArray(): Array<String> {
+        val list = ArrayList<String>()
+        for (i in 0 until length()) {
+            list.add(getString(i))
+        }
+        return list.toTypedArray()
+    }
+
+    fun <T> ArrayList<T>.addIfNotExists(element: T?, comparator: (T?, T?) -> Boolean) {
+        synchronized(this) {
+            if (any { comparator(it, element) }.not()) {
+                element?.let {
+                    add(it)
+                }
+            }
+        }
+    }
+
+    fun <T> ArrayList<T>.removeIfExists(element: T, comparator: (T, T) -> Boolean) {
+        synchronized(this) {
+            if (any { comparator(it, element) }) {
+                remove(element)
+            }
+        }
+    }
+
+    fun <T> ArrayList<T>.getMatchedCount(keyword: String, fieldExtractor: (T) -> String): Int {
+        return this.filter {
+            fieldExtractor(it).contains(keyword, ignoreCase = true)
+        }.size
+    }
+
+    fun <T> Array<T?>.getMatchedCount(keyword: String, ignoreCase: Boolean, fieldExtractor: (T?) -> String): Int {
+        return this.filter {
+            it != null && fieldExtractor(it).contains(keyword, ignoreCase = ignoreCase)
+        }.size
+    }
+
+    /**
+     * Get second item from the list
+     */
+    fun <T> List<T>.second(): T {
+        return this[1]
     }
 }

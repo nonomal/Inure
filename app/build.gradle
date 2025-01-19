@@ -5,25 +5,30 @@ plugins {
     id 'org.jetbrains.kotlin.android'
     id 'com.google.devtools.ksp'
     id 'kotlin-kapt'
+    id 'dev.rikka.tools.refine' version '4.4.0'
 }
 
 android {
 
-    compileSdk 34
+    compileSdk 35
 
     buildFeatures {
         viewBinding false
         aidl true
+        buildConfig true
+        compose false
     }
 
     defaultConfig {
         applicationId "app.simple.inure"
         minSdkVersion 23
-        targetSdkVersion 34
-        versionCode 93
-        versionName "build93"
+        targetSdkVersion 35
+        versionCode 10200
+        versionName "Build102.0.0"
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // buildConfigField 'string', "VIRUS_TOTAL_API_KEY", "${properties.getProperty("VIRUS_TOTAL_API_KEY").toString()}"
 
         resValue "string", "versionName", versionName
 
@@ -34,9 +39,11 @@ android {
         }
 
         javaCompileOptions {
-            // Migrate the above block to KSP
             ksp {
                 arg("room.schemaLocation", "$projectDir/schemas".toString())
+            }
+            annotationProcessorOptions {
+                arguments += ["room.schemaLocation": "$projectDir/schemas".toString()]
             }
         }
     }
@@ -59,6 +66,23 @@ android {
         }
     }
 
+    signingConfigs {
+        betaRelease {
+            def tmpFilePath = System.getProperty("user.home") + "/work/_temp/keystore/"
+            def allFilesFromDir = new File(tmpFilePath).listFiles()
+
+            if (allFilesFromDir != null) {
+                def keystoreFile = allFilesFromDir.first()
+                keystoreFile.renameTo("keystore/key.jks")
+            }
+
+            storeFile = file("keystore/key.jks")
+            storePassword System.getenv("KEY_STORE_PASSWORD")
+            keyAlias System.getenv("ALIAS")
+            keyPassword System.getenv("KEY_PASSWORD")
+        }
+    }
+
     flavorDimensions.add("version")
 
     productFlavors {
@@ -77,25 +101,31 @@ android {
             versionNameSuffix "-test"
 
             // Remove permissions for beta build
-            manifestPlaceholders = [removePermission: "inure.terminal.permission.RUN_SCRIPT"]
-            manifestPlaceholders = [removePermission2: "inure.terminal.permission.APPEND_TO_PATH"]
-            manifestPlaceholders = [removePermission3: "inure.terminal.permission.PREPEND_TO_PATH"]
+            manifestPlaceholders = [
+                    removePermission : "inure.terminal.permission.RUN_SCRIPT",
+                    removePermission2: "inure.terminal.permission.APPEND_TO_PATH",
+                    removePermission3: "inure.terminal.permission.PREPEND_TO_PATH"
+            ]
+
+            // Include all github flavor files
+            sourceSets {
+                beta {
+                    java.srcDirs += 'src/github/java'
+                    res.srcDirs += 'src/github/res'
+                    resources.srcDirs += 'src/github/resources'
+                }
+            }
+
+            signingConfig signingConfigs.debug
         }
     }
 
     buildTypes {
         release {
-            // Enables code shrinking, obfuscation, and optimization for only
-            // your project's release build type. Make sure to use a build
-            // variant with `debuggable false`.
             minifyEnabled false
-
-            // Enables resource shrinking, which is performed by the
-            // Android Gradle plugin.
             shrinkResources false
 
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug
 
             dependenciesInfo {
                 includeInApk true
@@ -105,6 +135,16 @@ android {
         debug {
             versionNameSuffix "_debug"
             debuggable true
+
+            minifyEnabled false
+            shrinkResources false
+
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            dependenciesInfo {
+                includeInApk true
+                includeInBundle true
+            }
         }
     }
 
@@ -133,84 +173,105 @@ android {
 }
 
 dependencies {
+    // compileOnly project(':hidden-api-stub')
 
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.3'
+    // Android Tools
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+    implementation 'com.android.tools.build:apksig:4.0.2'
+
+    // Jar Libs, all included in the libs folder
     implementation fileTree(dir: 'libs', include: ['*.jar'])
 
     // Test
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
 
     // Kotlin
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1'
+    runtimeOnly 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
 
     // AndroidX
-    implementation 'androidx.core:core-ktx:1.10.1'
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'androidx.fragment:fragment-ktx:1.6.1'
-    implementation 'androidx.activity:activity-ktx:1.7.2'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.1'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1'
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.1'
-    implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.6.1'
-    implementation 'androidx.recyclerview:recyclerview:1.3.1'
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.legacy:legacy-support-v4:1.0.0' // We use LocalBroadcastManager, Lol!!
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.0'
+    implementation 'androidx.fragment:fragment-ktx:1.8.5'
+    implementation 'androidx.activity:activity-ktx:1.9.3'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'androidx.recyclerview:recyclerview-selection:1.1.0'
-    implementation 'androidx.webkit:webkit:1.7.0'
+    implementation 'androidx.webkit:webkit:1.12.1'
     implementation 'androidx.documentfile:documentfile:1.0.1'
-    implementation 'androidx.media:media:1.6.0'
-    implementation 'androidx.viewpager2:viewpager2:1.1.0-beta02'
+    implementation 'androidx.media:media:1.7.0'
+    implementation 'androidx.viewpager2:viewpager2:1.1.0'
     implementation 'androidx.dynamicanimation:dynamicanimation-ktx:1.0.0-alpha03'
-    implementation "androidx.security:security-crypto:1.1.0-alpha06"
-    implementation 'androidx.core:core-splashscreen:1.0.1'
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    implementation 'androidx.work:work-runtime-ktx:2.10.0'
+    implementation 'androidx.transition:transition-ktx:1.5.1'
 
     // Google
-    implementation 'com.google.android.material:material:1.9.0'
-    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'com.google.code.gson:gson:2.11.0'
     implementation 'com.google.android.flexbox:flexbox:3.0.0'
+    playImplementation 'com.google.android.play:review:2.0.2'
+    playImplementation 'com.google.android.play:review-ktx:2.0.2'
 
     // Glide
-    implementation 'com.github.bumptech.glide:glide:4.15.1'
-    implementation 'com.github.bumptech.glide:okhttp3-integration:4.15.1'
+    implementation 'com.github.bumptech.glide:glide:4.16.0'
+    implementation 'com.github.bumptech.glide:okhttp3-integration:4.16.0'
     //noinspection KaptUsageInsteadOfKsp
-    kapt 'com.github.bumptech.glide:compiler:4.15.1'
+    kapt 'com.github.bumptech.glide:compiler:4.16.0'
 
     // Toolkit
     implementation 'com.github.android:renderscript-intrinsics-replacement-toolkit:b6363490c3'
 
     // Third Party
     implementation 'net.dongliu:apk-parser:2.6.10'
-    implementation 'com.scottyab:rootbeer-lib:0.1.0'
     implementation 'com.caverock:androidsvg-aar:1.4'
-    implementation 'com.anggrayudi:storage:1.5.4'
+    implementation 'com.anggrayudi:storage:1.5.5'
     implementation 'com.github.duanhong169:drawabletoolbox:1.0.7'
     implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
     implementation 'net.lingala.zip4j:zip4j:2.11.5'
     implementation 'com.davemorrissey.labs:subsampling-scale-image-view-androidx:3.10.0'
-    implementation 'com.jaredrummler:apk-parser:1.0.2'
     implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
+    // TODO : Update to latest version when available
+    // https://github.com/REAndroid/ARSCLib
+    implementation 'com.github.REAndroid:ARSCLib:95af206081'
+    implementation 'io.noties.markwon:core:4.6.2'
+
+    githubImplementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    betaImplementation 'com.squareup.okhttp3:okhttp:4.12.0'
 
     // root
-    def libsuVersion = '5.1.0'
+    def libsuVersion = '6.0.0'
     implementation "com.github.topjohnwu.libsu:core:${libsuVersion}"
     implementation "com.github.topjohnwu.libsu:service:${libsuVersion}"
     implementation "com.github.topjohnwu.libsu:nio:${libsuVersion}"
 
     // Shizuku
-    def shizukuVersion = '13.1.0'
+    def shizukuVersion = '13.1.5'
     //noinspection GradleDependency
     implementation "dev.rikka.shizuku:api:${shizukuVersion}"
     //noinspection GradleDependency
     implementation "dev.rikka.shizuku:provider:${shizukuVersion}"
 
+    // Refine
+    kapt "dev.rikka.tools.refine:annotation-processor:4.4.0"
+    //noinspection GradleDependency
+    compileOnly "dev.rikka.tools.refine:annotation:4.3.0"
+
+    // Hidden API
+    implementation "dev.rikka.hidden:compat:4.3.3"
+    compileOnly "dev.rikka.hidden:stub:4.3.3"
+
     // Room
-    implementation 'androidx.room:room-ktx:2.5.2'
-    ksp 'androidx.room:room-compiler:2.5.2'
-    androidTestImplementation 'androidx.room:room-testing:2.5.2'
+    implementation 'androidx.room:room-ktx:2.6.1'
+    //noinspection KaptUsageInsteadOfKsp
+    kapt 'androidx.room:room-compiler:2.6.1'
+    androidTestImplementation 'androidx.room:room-testing:2.6.1'
 
     // debugImplementation because LeakCanary should only run in debug builds.
     // debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.11'
-
 }

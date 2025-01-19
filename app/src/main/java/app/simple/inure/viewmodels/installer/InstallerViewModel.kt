@@ -11,15 +11,19 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.apk.installer.InstallerUtils
+import app.simple.inure.apk.utils.APKCertificateUtils
 import app.simple.inure.apk.utils.PackageData
 import app.simple.inure.apk.utils.PackageData.getInstallerDir
 import app.simple.inure.apk.utils.PackageUtils.getPackageArchiveInfo
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.RootShizukuViewModel
+import app.simple.inure.helpers.ShizukuServiceHelper
+import app.simple.inure.models.User
 import app.simple.inure.preferences.ConfigurationPreferences
-import app.simple.inure.shizuku.Shell.Command
-import app.simple.inure.shizuku.ShizukuUtils
+import app.simple.inure.shizuku.PackageInstaller
 import app.simple.inure.util.ConditionUtils.invert
 import app.simple.inure.util.FileUtils
+import app.simple.inure.util.FileUtils.escapeSpecialCharactersForUnixPath
 import app.simple.inure.util.FileUtils.getLength
 import app.simple.inure.util.NullSafety.isNull
 import app.simple.inure.util.StringUtils.endsWithAny
@@ -29,12 +33,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import net.lingala.zip4j.ZipFile
 import java.io.File
+import java.security.cert.X509Certificate
 
 class InstallerViewModel(application: Application, private val uri: Uri?, val file: File?) : RootShizukuViewModel(application) {
 
     private var files: ArrayList<File>? = null
     private var splitApkFiles: ArrayList<File>? = null
     private var baseApk: File? = null
+    private var user: User? = null
     private val splitApkExtensions = arrayOf(".zip", ".apks", ".apkm", ".xapk")
 
     private val packageInfo: MutableLiveData<PackageInfo> by lazy {
@@ -53,6 +59,10 @@ class InstallerViewModel(application: Application, private val uri: Uri?, val fi
         MutableLiveData<Int>()
     }
 
+    private val signatureMismatch: MutableLiveData<Boolean> by lazy {
+        MutableLiveData<Boolean>()
+    }
+
     fun getPackageInfo(): LiveData<PackageInfo> {
         return packageInfo
     }
@@ -63,6 +73,10 @@ class InstallerViewModel(application: Application, private val uri: Uri?, val fi
 
     fun getSuccess(): LiveData<Int> {
         return success
+    }
+
+    fun getSignatureStatus(): LiveData<Boolean> {
+        return signatureMismatch
     }
 
     private fun prepare() {
@@ -81,37 +95,52 @@ class InstallerViewModel(application: Application, private val uri: Uri?, val fi
         clearInstallerCache()
         PackageData.makePackageFolder(applicationContext())
 
-        if (file != null && file.exists()) {
-            if (file.name.endsWithAny(*splitApkExtensions)) {
-                ZipFile(file.path).extractAll(file.path.substringBeforeLast("."))
-                files = File(file.path.substringBeforeLast("."))
-                    .listFiles()!!.toList() as ArrayList<File> /* = java.util.ArrayList<java.io.File> */
-            } else if (file.name.endsWith(".apk")) {
-                files = arrayListOf(file)
-            }
-        } else {
-            uri?.let { it ->
-                val documentFile = DocumentFile.fromSingleUri(applicationContext(), it)!!
-                val sourceFile = if (documentFile.name!!.endsWith(".apk")) {
-                    applicationContext().getInstallerDir(documentFile.name!!)
-                } else {
-                    applicationContext().getInstallerDir(documentFile.baseName + ".zip")
-                }
-
-                if (!sourceFile.exists()) {
-                    contentResolver.openInputStream(it).use {
-                        FileUtils.copyStreamToFile(it!!, sourceFile)
+        when {
+            file != null && file.exists() -> {
+                when {
+                    file.name.endsWithAny(*splitApkExtensions) -> {
+                        ZipFile(file.path).extractAll(file.path.substringBeforeLast("."))
+                        files = File(file.path.substringBeforeLast("."))
+                            .listFiles()!!.toList() as ArrayList<File> /* = java.util.ArrayList<java.io.File> */
+                    }
+                    file.name.endsWith(".apk") -> {
+                        files = arrayListOf(file)
                     }
                 }
+            }
+            else -> {
+                uri?.let { it ->
+                    val documentFile = DocumentFile.fromSingleUri(applicationContext(), it)!!
+                    val sourceFile = if (documentFile.name!!.endsWith(".apk")) {
+                        applicationContext().getInstallerDir(documentFile.name!!)
+                    } else {
+                        applicationContext().getInstallerDir(documentFile.baseName + ".zip")
+                    }
 
-                if (documentFile.name!!.endsWithAny(*splitApkExtensions)) {
-                    ZipFile(sourceFile.path).extractAll(sourceFile.path.substringBeforeLast("."))
-                    files = File(sourceFile.path.substringBeforeLast("."))
-                        .listFiles()!!.toList() as ArrayList<File> /* = java.util.ArrayList<java.io.File> */
-                } else if (documentFile.name!!.endsWith(".apk")) {
-                    files = arrayListOf(sourceFile)
+                    if (!sourceFile.exists()) {
+                        contentResolver.openInputStream(it).use {
+                            FileUtils.copyStreamToFile(it!!, sourceFile)
+                        }
+                    }
+
+                    if (documentFile.name!!.endsWithAny(*splitApkExtensions)) {
+                        ZipFile(sourceFile.path).extractAll(sourceFile.path.substringBeforeLast("."))
+                        files = File(sourceFile.path.substringBeforeLast("."))
+                            .listFiles()!!.toList() as ArrayList<File> /* = java.util.ArrayList<java.io.File> */
+                    } else if (documentFile.name!!.endsWith(".apk")) {
+                        files = arrayListOf(sourceFile)
+                    }
                 }
             }
+        }
+
+        // Remove any file from the list that is not an apk
+        files!!.removeIf {
+            val shouldRemove = !it.name.endsWith(".apk") || it.isDirectory
+            if (shouldRemove) {
+                Log.d(TAG, "Removing file: ${it.name}")
+            }
+            shouldRemove
         }
     }
 
@@ -131,13 +160,14 @@ class InstallerViewModel(application: Application, private val uri: Uri?, val fi
          * Find base/master apk
          */
         for (file in files!!) {
-            packageInfo = packageManager.getPackageArchiveInfo(file) ?: continue
-            packageInfo.applicationInfo.sourceDir = file.absolutePath
-            packageInfo.applicationInfo.publicSourceDir = file.absolutePath
-            packageInfo.applicationInfo.name = packageManager.getApplicationLabel(packageInfo.applicationInfo).toString()
+            packageInfo = packageManager.getPackageArchiveInfo(file) ?: continue // We ran into split apk, continue until we find base apk
+            packageInfo.safeApplicationInfo.sourceDir = file.absolutePath
+            packageInfo.safeApplicationInfo.publicSourceDir = file.absolutePath
+            packageInfo.safeApplicationInfo.name = packageManager.getApplicationLabel(packageInfo.safeApplicationInfo).toString()
             this.packageInfo.postValue(packageInfo)
             baseApkLiveData.postValue(file)
             baseApk = file
+            signatureCheck(packageInfo)
 
             try {
                 splitApkFiles!!.remove(file)
@@ -150,6 +180,29 @@ class InstallerViewModel(application: Application, private val uri: Uri?, val fi
 
         if (packageInfo.isNull()) {
             throw Exception("ERR: unable to get package info")
+        }
+    }
+
+    private fun signatureCheck(packageInfo: PackageInfo) {
+        kotlin.runCatching {
+            val certificates: Array<X509Certificate>? = APKCertificateUtils(file, packageInfo.packageName, applicationContext()).x509Certificates
+            val existingSignatures = APKCertificateUtils(null, packageInfo.packageName, applicationContext()).x509Certificates
+
+            outerLoop@ for (cert in certificates!!) {
+                for (existingCert in existingSignatures!!) {
+                    val sha1 = APKCertificateUtils.getCertificateFingerprint(cert, APKCertificateUtils.SHA256)
+                    val existingSha1 = APKCertificateUtils.getCertificateFingerprint(existingCert, APKCertificateUtils.SHA256)
+
+                    if (sha1 == existingSha1) {
+                        signatureMismatch.postValue(false)
+                        break@outerLoop
+                    } else {
+                        signatureMismatch.postValue(true)
+                    }
+                }
+            }
+        }.getOrElse {
+            it.printStackTrace()
         }
     }
 
@@ -171,58 +224,55 @@ class InstallerViewModel(application: Application, private val uri: Uri?, val fi
     private fun rootInstall() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                Shell.cmd("run-as ${packageInfo.value!!.packageName}").exec()
+                Shell.cmd("run-as ${applicationContext().packageName}").exec()
 
                 val totalSizeOfAllApks = files!!.getLength()
-                Log.d("Installer", "Total size of all apks: $totalSizeOfAllApks")
+                Log.d(TAG, "Total size of all apks: $totalSizeOfAllApks")
                 val sessionId = with(Shell.cmd("${installCommand()} $totalSizeOfAllApks").exec()) {
-                    Log.d("Installer", "Output: $out")
+                    Log.d(TAG, "Output: $out")
                     with(out[0]) {
                         substringAfter("[").substringBefore("]").toInt()
                     }
                 }
 
-                Log.d("Installer", "Session id: $sessionId")
+                Log.d(TAG, "Session id: $sessionId")
                 for (file in files!!) {
                     if (file.exists() && file.name.endsWith(".apk")) {
                         val size = file.length()
-                        Log.d("Installer", "Size of ${file.name}: $size")
+                        Log.d(TAG, "Size of ${file.name}: $size")
                         val splitName = file.name.substringBeforeLast(".")
-                        Log.d("Installer", "Split name: $splitName")
+                        Log.d(TAG, "Split name: $splitName")
                         val idx = files?.indexOf(file)
-                        Log.d("Installer", "Index: $idx")
+                        Log.d(TAG, "Index: $idx")
 
-                        val path = file.absolutePath
-                            .replace(" ", "\\ ")
-                            .replace("(", "\\(")
-                            .replace(")", "\\)")
-                        Log.d("Installer", "Path: $path")
+                        val path = file.absolutePath.escapeSpecialCharactersForUnixPath()
+                        Log.d(TAG, "Path: $path")
 
                         Shell.cmd("pm install-write -S $size $sessionId $idx $path").exec().let {
-                            Log.d("Installer", "Output: ${it.out}")
-                            Log.d("Installer", "Error: ${it.err}")
+                            Log.d(TAG, "Output: ${it.out}")
+                            Log.d(TAG, "Error: ${it.err}")
                         }
                     }
                 }
 
                 Shell.cmd("pm install-commit $sessionId").exec().let { result ->
                     if (result.isSuccess) {
-                        Log.d("Installer", "Output: ${result.out}")
-                        Log.d("Installer", "Error: ${result.err}")
+                        Log.d(TAG, "Output: ${result.out}")
+                        Log.d(TAG, "Error: ${result.err}")
                         success.postValue((0..50).random())
 
-                        Log.d("Installer", "Setting installer to ${application.packageName} for ${packageInfo.value!!.packageName}")
-                        Shell.cmd("pm set-installer ${packageInfo.value!!.packageName} ${application.packageName}").exec().let {
+                        Log.d(TAG, "Setting installer to ${applicationContext().packageName} for ${packageInfo.value!!.packageName}")
+                        Shell.cmd("pm set-installer ${packageInfo.value!!.packageName} ${applicationContext().packageName}").exec().let {
                             if (it.isSuccess) {
-                                Log.d("Installer", "Installer set to ${application.packageName} for ${packageInfo.value!!.packageName}")
+                                Log.d(TAG, "Installer set to ${applicationContext().packageName} for ${packageInfo.value!!.packageName}")
                             } else {
-                                Log.d("Installer", "Unable to set installer to ${application.packageName} for ${packageInfo.value!!.packageName}")
-                                Log.e("Installer", "Output: ${it.out}")
+                                Log.d(TAG, "Unable to set installer to ${applicationContext().packageName} for ${packageInfo.value!!.packageName}")
+                                Log.e(TAG, "Output: ${it.out}")
                             }
                         }
                     } else {
-                        Log.d("Installer", "Output: ${result.out}")
-                        Log.d("Installer", "Error: ${result.err}")
+                        Log.d(TAG, "Output: ${result.out}")
+                        Log.d(TAG, "Error: ${result.err}")
                         postWarning(result.out.joinToString())
                     }
                 }
@@ -239,119 +289,9 @@ class InstallerViewModel(application: Application, private val uri: Uri?, val fi
         }
     }
 
-    private fun shizukuInstall() {
-        viewModelScope.launch(Dispatchers.IO) {
-            Log.d("Installer", "Shizuku install")
+    fun install(user: User? = null) {
+        this.user = user
 
-            try {
-                val totalSizeOfAllApks = files!!.getLength()
-                Log.d("Installer", "Total size of all apks: $totalSizeOfAllApks")
-                val sessionId = with(ShizukuUtils.execInternal(
-                        Command("pm install-create -S $totalSizeOfAllApks"), null)) {
-                    Log.d("Installer", "Output: $out")
-                    with(out) {
-                        if (isNotEmpty()) {
-                            "${substringAfter("[").substringBefore("]").toInt()}"
-                        } else {
-                            postWarning("ERR: unable to get session id")
-                            return@launch
-                        }
-                    }
-                }
-
-                /**
-                 * Install base apk
-                 */
-                context.contentResolver.openInputStream(
-                        FileProvider.getUriForFile(applicationContext(), "${applicationContext().packageName}.provider", baseApk!!)).use { inputStream ->
-                    ShizukuUtils.execInternal(Command("pm install-write -S ${baseApk?.length()} $sessionId base-"), inputStream).let {
-                        Log.d("Installer", "Output: ${it.out}")
-                        Log.d("Installer", "Error: ${it.err}")
-                    }
-                }
-
-                Log.d("Installer", "Session id: $sessionId")
-                for (file in splitApkFiles!!) {
-                    if (file.exists() && file.name.endsWith(".apk") && splitApkFiles!!.size >= 1) {
-                        val size = file.length()
-                        Log.d("Installer", "Size of ${file.name}: $size")
-                        val splitName = file.name.substringBeforeLast(".")
-                        Log.d("Installer", "Split name: $splitName")
-                        val idx = splitApkFiles?.indexOf(file)
-                        Log.d("Installer", "Index: $idx")
-                        val path = file.absolutePath
-                            .replace(" ", "\\ ")
-                            .replace("(", "\\(")
-                            .replace(")", "\\)")
-                        Log.d("Installer", "Path: $path")
-
-                        // create uri from file
-                        val uri = FileProvider.getUriForFile(applicationContext(),
-                                                             "${applicationContext().packageName}.provider", file)
-
-                        /**
-                         * Install split apks
-                         */
-                        context.contentResolver.openInputStream(uri).use { inputStream ->
-                            ShizukuUtils.execInternal(
-                                    Command("pm install-write -S $size $sessionId $splitName-"), inputStream).let {
-                                Log.d("Installer", "Output: ${it.out}")
-                                Log.d("Installer", "Error: ${it.err}")
-                            }
-                        }
-                    } else { // Not a split apk
-                        val size = file.length()
-                        Log.d("Installer", "Size of ${file.name}: $size")
-                        val path = file.absolutePath
-                            .replace(" ", "\\ ")
-                            .replace("(", "\\(")
-                            .replace(")", "\\)")
-                        Log.d("Installer", "Path: $path")
-
-                        // create uri from file
-                        val uri = FileProvider.getUriForFile(applicationContext(),
-                                                             "${applicationContext().packageName}.provider", file)
-
-                        context.contentResolver.openInputStream(uri).use { inputStream ->
-                            ShizukuUtils.execInternal(
-                                    Command("pm install-write -S $size $sessionId base-"), inputStream).let {
-                                Log.d("Installer", "Output: ${it.out}")
-                                Log.d("Installer", "Error: ${it.err}")
-                            }
-                        }
-                    }
-                }
-
-                ShizukuUtils.execInternal(Command("pm install-commit $sessionId"), null).let { result ->
-                    if (result.isSuccessful) {
-                        Log.d("Installer", "Output: ${result.out}")
-                        Log.d("Installer", "Error: ${result.err}")
-                        success.postValue((0..50).random())
-
-                        Log.d("Installer", "Setting installer to ${application.packageName} for ${packageInfo.value!!.packageName}")
-                        ShizukuUtils.execInternal(Command("pm set-installer ${packageInfo.value!!.packageName} ${application.packageName}"), null)
-                            .let {
-                                if (it.isSuccessful) {
-                                    Log.d("Installer", "Installer set to ${application.packageName} for ${packageInfo.value!!.packageName}")
-                                } else {
-                                    Log.d("Installer", "Unable to set installer to ${application.packageName} for ${packageInfo.value!!.packageName}")
-                                    Log.e("Installer", "Output: ${it.out}")
-                                }
-                            }
-                    } else {
-                        Log.d("Installer", "Output: ${result.out}")
-                        Log.d("Installer", "Error: ${result.err}")
-                        postWarning(result.out)
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                postError(e)
-            }
-        }
-    }
-
-    fun install() {
         if (ConfigurationPreferences.isUsingShizuku() || ConfigurationPreferences.isUsingRoot()) {
             initializeCoreFramework()
         } else {
@@ -367,8 +307,29 @@ class InstallerViewModel(application: Application, private val uri: Uri?, val fi
         packageManagerInstall()
     }
 
-    override fun onShizukuCreated() {
-        shizukuInstall()
+    override fun onShizukuCreated(shizukuServiceHelper: ShizukuServiceHelper) {
+        viewModelScope.launch(Dispatchers.IO) {
+            Log.d(TAG, "Shizuku install")
+
+            try {
+                val uris = files!!.map { file ->
+                    FileProvider.getUriForFile(
+                            applicationContext(), "${applicationContext().packageName}.provider", file)
+                }
+
+                val packageInstaller = PackageInstaller()
+                val shizukuInstall = packageInstaller.install(uris, applicationContext())
+
+                if (shizukuInstall.status == android.content.pm.PackageInstaller.STATUS_SUCCESS) {
+                    success.postValue((0..50).random())
+                } else {
+                    postWarning("ERR: ${shizukuInstall.status} : ${shizukuInstall.message}")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                postWarning(e.message ?: "Unknown error")
+            }
+        }
     }
 
     override fun onShizukuDenied() {
@@ -388,11 +349,39 @@ class InstallerViewModel(application: Application, private val uri: Uri?, val fi
     }
 
     private fun installCommand(): String {
-        // Check if greater than nougat
+        /**
+         * Users feature is only available after Nougat
+         */
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            "pm install-create --user current -S"
+            "pm install-create -i ${applicationContext().packageName} --user ${user?.id ?: getCurrentUser()} -S"
         } else {
-            "pm install-create -i -S"
+            "pm install-create -i ${applicationContext().packageName} -S"
         }
+    }
+
+    fun installAnyway() {
+        viewModelScope.launch(Dispatchers.IO) {
+            kotlin.runCatching {
+                val path = packageInfo.value!!.applicationInfo?.sourceDir?.escapeSpecialCharactersForUnixPath()
+
+                Shell.cmd("run-as ${applicationContext().packageName}").exec()
+                Shell.cmd("pm install --bypass-low-target-sdk-block $path").exec().let {
+                    if (it.isSuccess) {
+                        success.postValue((0..50).random())
+                    } else {
+                        postWarning(it.err.joinToString())
+                        Log.e(TAG, "Error: ${it.err}")
+                    }
+
+                    Log.d(TAG, "Output: ${it.out}")
+                }
+            }.onFailure {
+                postWarning(it.message ?: "Unknown error")
+            }
+        }
+    }
+
+    companion object {
+        private const val TAG = "InstallerViewModel"
     }
 }

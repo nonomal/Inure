@@ -14,7 +14,7 @@ import app.simple.inure.adapters.ui.AdapterUsageStats
 import app.simple.inure.constants.BottomMenuConstants
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
-import app.simple.inure.dialogs.menus.AppsMenu
+import app.simple.inure.dialogs.app.AppMenu
 import app.simple.inure.dialogs.miscellaneous.UsageStatsPermission
 import app.simple.inure.dialogs.miscellaneous.UsageStatsPermission.Companion.showUsageStatsPermissionDialog
 import app.simple.inure.dialogs.usagestats.UsageStatsMenu
@@ -35,7 +35,6 @@ class Statistics : ScopedFragment() {
         val view = inflater.inflate(R.layout.fragment_statistics, container, false)
 
         recyclerView = view.findViewById(R.id.usage_rv)
-
         usageStatsViewModel = ViewModelProvider(requireActivity())[UsageStatsViewModel::class.java]
 
         return view
@@ -43,16 +42,21 @@ class Statistics : ScopedFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        showLoader()
-        fullVersionCheck()
+
+        if (fullVersionCheck()) {
+            if (usageStatsViewModel.shouldShowLoader()) {
+                showLoader(manualOverride = true)
+            }
+        }
 
         if (!requireContext().checkForUsageAccessPermission()) {
-            childFragmentManager.showUsageStatsPermissionDialog().setOnUsageStatsPermissionCallbackListener(object : UsageStatsPermission.Companion.UsageStatsPermissionCallbacks {
-                override fun onClosedAfterGrant() {
-                    adapterUsageStats?.enableLoader()
-                    usageStatsViewModel.loadAppStats()
-                }
-            })
+            childFragmentManager.showUsageStatsPermissionDialog()
+                .setOnUsageStatsPermissionCallbackListener(object : UsageStatsPermission.Companion.UsageStatsPermissionCallbacks {
+                    override fun onClosedAfterGrant() {
+                        adapterUsageStats?.enableLoader()
+                        usageStatsViewModel.loadAppStats()
+                    }
+                })
         }
 
         usageStatsViewModel.usageData.observe(viewLifecycleOwner) {
@@ -67,7 +71,7 @@ class Statistics : ScopedFragment() {
                 }
 
                 override fun onAppLongPressed(packageInfo: PackageInfo, icon: ImageView) {
-                    AppsMenu.newInstance(packageInfo)
+                    AppMenu.newInstance(packageInfo)
                         .show(childFragmentManager, "apps_menu")
                 }
             })
@@ -103,18 +107,18 @@ class Statistics : ScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            StatisticsPreferences.statsInterval,
-            StatisticsPreferences.isUnusedHidden,
-            StatisticsPreferences.appsCategory,
-            StatisticsPreferences.statsEngine -> {
+            StatisticsPreferences.STATS_INTERVAL,
+            StatisticsPreferences.IS_UNUSED_HIDDEN,
+            StatisticsPreferences.APPS_CATEGORY,
+            StatisticsPreferences.STATS_ENGINE -> {
                 adapterUsageStats?.enableLoader()
                 usageStatsViewModel.loadAppStats()
             }
-            StatisticsPreferences.isSortingReversed,
-            StatisticsPreferences.statsSorting -> {
+            StatisticsPreferences.IS_SORTING_REVERSED,
+            StatisticsPreferences.STATS_SORTING -> {
                 usageStatsViewModel.sortUsageData()
             }
-            StatisticsPreferences.limitHours -> {
+            StatisticsPreferences.LIMIT_HOURS -> {
                 handler.postDelayed(
                         { adapterUsageStats?.notifyAllData() }, 500)
             }
@@ -134,5 +138,7 @@ class Statistics : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "statistics"
     }
 }

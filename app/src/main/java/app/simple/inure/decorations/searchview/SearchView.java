@@ -2,8 +2,11 @@ package app.simple.inure.decorations.searchview;
 
 import android.animation.LayoutTransition;
 import android.animation.ValueAnimator;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.style.ForegroundColorSpan;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
@@ -32,17 +35,25 @@ public class SearchView extends LinearLayout implements SharedPreferences.OnShar
     private ThemeIcon icon;
     private TypeFaceEditText editText;
     private TypeFaceTextView number;
-    private DynamicRippleImageButton menu;
+    private DynamicRippleImageButton settings;
     private DynamicRippleImageButton clear;
     private DynamicRippleImageButton refresh;
+    private DynamicRippleImageButton filter;
+    private DynamicRippleImageButton more;
     private CustomProgressBar loader;
     private SearchViewEventListener searchViewEventListener;
     
     private ValueAnimator numberAnimator;
     private ValueAnimator iconAnimator;
     private final DecimalFormat format = new DecimalFormat();
+    private final Handler handler = new Handler(Looper.getMainLooper());
     
     private int oldNumber = 0;
+    
+    /**
+     * @noinspection FieldCanBeLocal
+     */
+    private final int MORE_BUTTON_DELAY = 3000;
     
     public SearchView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -57,41 +68,40 @@ public class SearchView extends LinearLayout implements SharedPreferences.OnShar
         setLayoutTransition(new LayoutTransition());
     }
     
+    @SuppressLint ("SetTextI18n")
     private void initViews() {
         View view = LayoutInflater.from(getContext()).inflate(R.layout.search_view, this, true);
-    
+        
         icon = view.findViewById(R.id.icon);
-        editText = view.findViewById(R.id.search_view_text_input_layout);
+        editText = view.findViewById(R.id.edit_text);
         number = view.findViewById(R.id.search_number);
-        menu = view.findViewById(R.id.search_view_menu_button);
-        clear = view.findViewById(R.id.search_view_clear_button);
-        refresh = view.findViewById(R.id.search_view_refresh_button);
+        settings = view.findViewById(R.id.settings_button);
+        clear = view.findViewById(R.id.clear_button);
+        refresh = view.findViewById(R.id.refresh_button);
+        filter = view.findViewById(R.id.filter_button);
+        more = view.findViewById(R.id.more_button);
         loader = view.findViewById(R.id.loader);
-    
+        
         if (!isInEditMode()) {
-            if (SearchPreferences.INSTANCE.getLastSearchKeyword().length() > 0) {
-                ViewUtils.INSTANCE.visible(clear, true);
-                ViewUtils.INSTANCE.visible(refresh, true);
+            if (!SearchPreferences.INSTANCE.getLastSearchKeyword().isEmpty()) {
+                ViewUtils.INSTANCE.visible(clear, false);
                 editText.setText(SearchPreferences.INSTANCE.getLastSearchKeyword());
-    
+                
                 if (SearchPreferences.INSTANCE.getLastSearchKeyword().startsWith("#")) {
-                    if (!SearchPreferences.INSTANCE.isDeepSearchEnabled()) {
-                        editText.getText().setSpan(
-                                new ForegroundColorSpan(AppearancePreferences.INSTANCE.getAccentColor()), 0, 1, 0);
-                    }
+                    editText.getText().setSpan(
+                            new ForegroundColorSpan(AppearancePreferences.INSTANCE.getAccentColor()), 0, 1, 0);
                 }
             } else {
                 ViewUtils.INSTANCE.gone(clear, true);
-                ViewUtils.INSTANCE.gone(refresh, true);
             }
         }
-    
+        
         updateDeepSearchData();
         editText.setSaveEnabled(false); // ViewModel and SharedPreferences will handle the saved states
-    
-        TextViewUtils.INSTANCE.doOnTextChanged(editText, (s, start, before, count) -> {
-            boolean isValidCount = s.toString().trim().replace("#", "").length() > 0;
         
+        TextViewUtils.INSTANCE.doOnTextChanged(editText, (s, start, before, count) -> {
+            boolean isValidCount = !s.toString().trim().replace("#", "").isEmpty();
+            
             if (editText.isFocused()) {
                 if (!s.toString().trim().equals(SearchPreferences.INSTANCE.getLastSearchKeyword())) {
                     if (isValidCount) {
@@ -99,42 +109,53 @@ public class SearchView extends LinearLayout implements SharedPreferences.OnShar
                     } else {
                         loader.setVisibility(View.GONE);
                     }
+                    
                     searchViewEventListener.onSearchTextChanged(s.toString().trim(), count);
                 }
             }
-        
+            
             SearchPreferences.INSTANCE.setLastSearchKeyword(s.toString().trim());
-        
+            
             if (isValidCount) {
                 ViewUtils.INSTANCE.visible(clear, true);
-                ViewUtils.INSTANCE.visible(refresh, true);
             } else {
                 ViewUtils.INSTANCE.gone(clear, true);
-                ViewUtils.INSTANCE.gone(refresh, true);
             }
-        
-            if (s.toString().trim().startsWith("#")) {
-                if (!SearchPreferences.INSTANCE.isDeepSearchEnabled()) {
-                    editText.getText().setSpan(
-                            new ForegroundColorSpan(AppearancePreferences.INSTANCE.getAccentColor()), 0, 1, 0);
-                }
-            } else {
-                editText.getText().removeSpan(new ForegroundColorSpan(AppearancePreferences.INSTANCE.getAccentColor()));
-            }
-        
+            
+            updateSpans();
+            
             return Unit.INSTANCE;
         });
-    
-        menu.setOnClickListener(button -> searchViewEventListener.onSearchMenuPressed(button));
-    
+        
+        settings.setOnClickListener(button -> searchViewEventListener.onSearchMenuPressed(button));
+        filter.setOnClickListener(button -> searchViewEventListener.onFilterPressed(button));
+        more.setOnClickListener(v -> moreButtonState(true));
+        
         refresh.setOnClickListener(button -> {
             loader.setVisibility(View.VISIBLE);
             searchViewEventListener.onSearchRefreshPressed(button);
         });
-    
+        
         clear.setOnClickListener(button -> {
-            editText.getText().clear();
+            String text = editText.getText().toString().trim();
+            if (text.startsWith("#")) {
+                String[] parts = text.split(" ", 2);
+                if (parts.length > 1 && !parts[1].isEmpty()) {
+                    // Clear the keyword only
+                    editText.setText(parts[0] + " ");
+                    editText.setSelection(editText.getText().length());
+                } else {
+                    // Clear the tag
+                    editText.getText().clear();
+                }
+            } else {
+                // Clear the entire text
+                editText.getText().clear();
+            }
+            
             setNewNumber(0);
+            searchViewEventListener.onClear(button);
+            SearchPreferences.INSTANCE.setLastSearchKeyword(editText.getText().toString().trim());
         });
     }
     
@@ -144,26 +165,63 @@ public class SearchView extends LinearLayout implements SharedPreferences.OnShar
         app.simple.inure.preferences.SharedPreferences.INSTANCE.registerSharedPreferencesListener(this);
     }
     
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        editText.clearAnimation();
-        menu.clearAnimation();
-        if (numberAnimator != null) {
-            numberAnimator.cancel();
-        }
-        if (iconAnimator != null) {
-            iconAnimator.cancel();
-        }
-        app.simple.inure.preferences.SharedPreferences.INSTANCE.unregisterListener(this);
-    }
-    
     public void hideLoader() {
         loader.setVisibility(View.GONE);
     }
     
+    public void showLoader() {
+        loader.setVisibility(View.VISIBLE);
+    }
+    
+    @SuppressLint ("SetTextI18n")
+    public void setKeyword(String keyword) {
+        if (editText.getText().toString().startsWith("#")) {
+            if (editText.getText().toString().split(" ").length > 1) {
+                String split = editText.getText().toString().split(" ")[0];
+                editText.setText(split + " " + keyword);
+            } else {
+                if (editText.getText().toString().endsWith(" ")) {
+                    editText.append(keyword);
+                } else {
+                    editText.append(" " + keyword);
+                }
+            }
+        } else {
+            editText.setText(keyword);
+        }
+        
+        editText.setSelection(editText.getText().length());
+        updateSpans();
+        showLoader();
+        handler.postDelayed(this :: showInput, 500);
+    }
+    
+    private void updateSpans() {
+        if (editText.getText().toString().trim().startsWith("#")) {
+            editText.getText().setSpan(
+                    new ForegroundColorSpan(AppearancePreferences.INSTANCE.getAccentColor()), 0, 1, 0);
+        } else {
+            if (editText.getText().getSpans(0, 1, ForegroundColorSpan.class).length > 0) {
+                // Remove the spans
+                for (ForegroundColorSpan span : editText.getText().getSpans(0, 1, ForegroundColorSpan.class)) {
+                    editText.getText().removeSpan(span);
+                }
+                
+                // Move the cursor to the end of the text
+                editText.setSelection(editText.getText().length());
+                // Focus the edit text
+                editText.requestFocus();
+            }
+        }
+    }
+    
+    public String getKeyword() {
+        return editText.getText().toString().trim();
+    }
+    
     public void setNewNumber(int number) {
         String pattern;
+        
         if (number < 1000) {
             pattern = "000";
         } else if (number < 10000) {
@@ -181,7 +239,7 @@ public class SearchView extends LinearLayout implements SharedPreferences.OnShar
         if (numberAnimator != null) {
             numberAnimator.cancel();
         }
-    
+        
         numberAnimator = ValueAnimator.ofInt(oldNumber, newNumber);
         numberAnimator.setInterpolator(new FastOutLinearInInterpolator());
         numberAnimator.setDuration(getResources().getInteger(R.integer.animation_duration));
@@ -204,7 +262,21 @@ public class SearchView extends LinearLayout implements SharedPreferences.OnShar
         if (SearchPreferences.INSTANCE.isDeepSearchEnabled()) {
             iconAnimator = ViewUtils.INSTANCE.animateTint(icon, AppearancePreferences.INSTANCE.getAccentColor());
             editText.setHint(R.string.deep_search);
-            editText.getText().clearSpans();
+            
+            /*
+             * Just so you know, this is a very bad idea!!!!
+             * It will cause the app to work very slow
+             * and will cause the app to crash in some cases.
+             * I don't know why, but it does.
+             */
+            // editText.getText().clearSpans();
+            
+            /*
+             * This is a better way to do it
+             */
+            for (ForegroundColorSpan span : editText.getText().getSpans(0, 1, ForegroundColorSpan.class)) {
+                editText.getText().removeSpan(span);
+            }
         } else {
             iconAnimator = ViewUtils.INSTANCE.animateTint(icon, ThemeManager.INSTANCE.getTheme().getIconTheme().getSecondaryIconColor());
             editText.setHint(R.string.search);
@@ -216,13 +288,51 @@ public class SearchView extends LinearLayout implements SharedPreferences.OnShar
         }
     }
     
+    private final Runnable moreButtonRunnable = () -> {
+        moreButtonState(false);
+    };
+    
+    private void moreButtonState(boolean state) {
+        handler.removeCallbacks(moreButtonRunnable);
+        
+        if (state) {
+            filter.setScaleX(0);
+            filter.setScaleY(0);
+            settings.setScaleX(0);
+            settings.setScaleY(0);
+            refresh.setScaleX(0);
+            refresh.setScaleY(0);
+            
+            ViewUtils.INSTANCE.visible(filter, true);
+            ViewUtils.INSTANCE.visible(settings, true);
+            ViewUtils.INSTANCE.visible(refresh, true);
+            ViewUtils.INSTANCE.gone(more, false);
+            handler.postDelayed(moreButtonRunnable, MORE_BUTTON_DELAY);
+        } else {
+            ViewUtils.INSTANCE.gone(filter, true);
+            ViewUtils.INSTANCE.gone(refresh, true);
+            ViewUtils.INSTANCE.gone(settings, true, () -> {
+                /*
+                 * There is an animation glitch here, since I made the animation in sequential order
+                 * the layout transition stops abruptly when more button becomes visible. The best
+                 * workaround is to make the button visible but with 0 alpha and scale, then animate it.
+                 *
+                 * The best way to learn this behavior is to look into LayoutTransition and how it works.
+                 */
+                more.setVisibility(View.VISIBLE);
+                ViewUtils.INSTANCE.visible(more, true);
+                return Unit.INSTANCE;
+            });
+        }
+    }
+    
     public void setSearchViewEventListener(SearchViewEventListener searchViewEventListener) {
         this.searchViewEventListener = searchViewEventListener;
     }
     
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        if (key.equals(SearchPreferences.deepSearch)) {
+        if (key.equals(SearchPreferences.DEEP_SEARCH)) {
             loader.setVisibility(View.VISIBLE);
             updateDeepSearchData();
         }
@@ -230,5 +340,30 @@ public class SearchView extends LinearLayout implements SharedPreferences.OnShar
     
     public TypeFaceEditText getEditText() {
         return editText;
+    }
+    
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        handler.removeCallbacks(moreButtonRunnable);
+        handler.removeCallbacksAndMessages(null);
+        
+        editText.clearAnimation();
+        settings.clearAnimation();
+        clear.clearAnimation();
+        refresh.clearAnimation();
+        filter.clearAnimation();
+        more.clearAnimation();
+        loader.clearAnimation();
+        
+        if (numberAnimator != null) {
+            numberAnimator.cancel();
+        }
+        
+        if (iconAnimator != null) {
+            iconAnimator.cancel();
+        }
+        
+        app.simple.inure.preferences.SharedPreferences.INSTANCE.unregisterListener(this);
     }
 }

@@ -51,10 +51,14 @@ class ApkBrowserViewModel(application: Application) : WrappedViewModel(applicati
         return info
     }
 
+    fun shouldShowLoader(): Boolean {
+        return pathData.value.isNullOrEmpty()
+    }
+
     private fun loadApkPaths() {
         viewModelScope.launch(Dispatchers.IO) {
             val externalStoragePaths: ArrayList<File?> = if (ApkBrowserPreferences.isExternalStorage()) {
-                arrayListOf(Environment.getExternalStorageDirectory(), SDCard.findSdCardPath(application))
+                arrayListOf(Environment.getExternalStorageDirectory(), SDCard.findSdCardPath(applicationContext()))
             } else {
                 arrayListOf(Environment.getExternalStorageDirectory())
             }
@@ -306,7 +310,7 @@ class ApkBrowserViewModel(application: Application) : WrappedViewModel(applicati
         }
     }
 
-    fun delete(file: ApkFile) {
+    fun remove(file: ApkFile) {
         files.remove(file)
     }
 }

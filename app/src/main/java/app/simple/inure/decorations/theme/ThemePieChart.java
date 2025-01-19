@@ -9,6 +9,8 @@ import android.util.AttributeSet;
 import com.github.mikephil.charting.animation.Easing;
 import com.github.mikephil.charting.charts.PieChart;
 import com.github.mikephil.charting.components.Legend;
+import com.github.mikephil.charting.data.PieDataSet;
+import com.github.mikephil.charting.formatter.PercentFormatter;
 
 import androidx.annotation.NonNull;
 import app.simple.inure.R;
@@ -52,21 +54,21 @@ public class ThemePieChart extends PieChart implements SharedPreferences.OnShare
             setNoDataTextColor(ThemeManager.INSTANCE.getTheme().getTextViewTheme().getSecondaryTextColor());
             setNoDataTextTypeface(TypeFace.INSTANCE.getMediumTypeFace(getContext()));
         }
-    
+        
         setHoleColor(Color.TRANSPARENT);
         setUsePercentValues(false);
         setDragDecelerationFrictionCoef(0.95F);
         setHighlightPerTapEnabled(true);
         getDescription().setEnabled(false);
         setDrawCenterText(false);
-    
+        
         if (StatusBarHeight.isLandscape(getContext())) {
             setExtraOffsets(chartOffset * 2F, chartOffset * 2F, chartOffset * 2F, chartOffset * 2F);
             setExtraRightOffset(chartOffset * 4F);
         } else {
             setExtraOffsets(chartOffset, chartOffset, chartOffset, chartOffset);
         }
-    
+        
         /*
          * Legend's props
          */
@@ -77,13 +79,13 @@ public class ThemePieChart extends PieChart implements SharedPreferences.OnShare
         getLegend().setTextColor(ThemeManager.INSTANCE.getTheme().getTextViewTheme().getSecondaryTextColor());
         getLegend().setXEntrySpace(20F);
         getLegend().setYEntrySpace(5F);
-    
+        
         if (!isInEditMode()) {
             getLegend().setTypeface(TypeFace.INSTANCE.getMediumTypeFace(getContext()));
         }
-    
+        
         getLegend().setWordWrapEnabled(true);
-    
+        
         if (StatusBarHeight.isLandscape(getContext())) {
             getLegend().setXOffset(chartOffset * 3F);
             getLegend().setOrientation(Legend.LegendOrientation.VERTICAL);
@@ -99,6 +101,8 @@ public class ThemePieChart extends PieChart implements SharedPreferences.OnShare
     public void startAnimation() {
         if (!AccessibilityPreferences.INSTANCE.isAnimationReduced()) {
             animateXY(1000, 500, Easing.EaseOutCubic);
+        } else {
+            animateXY(0, 0, Easing.EaseOutCubic);
         }
     }
     
@@ -106,8 +110,9 @@ public class ThemePieChart extends PieChart implements SharedPreferences.OnShare
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
         //noinspection SwitchStatementWithTooFewBranches
         switch (key) {
-            case AnalyticsPreferences.pieHoleRadius ->
-                    animateHoleRadius(AnalyticsPreferences.INSTANCE.getPieHoleRadiusValue());
+            case AnalyticsPreferences.PIE_HOLE_RADIUS -> {
+                animateHoleRadius(AnalyticsPreferences.INSTANCE.getPieHoleRadiusValue());
+            }
         }
     }
     
@@ -121,7 +126,8 @@ public class ThemePieChart extends PieChart implements SharedPreferences.OnShare
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (!isInEditMode()) {
-            app.simple.inure.preferences.SharedPreferences.INSTANCE.getSharedPreferences().registerOnSharedPreferenceChangeListener(this);
+            app.simple.inure.preferences.SharedPreferences.INSTANCE
+                    .getSharedPreferences().registerOnSharedPreferenceChangeListener(this);
         }
         ThemeManager.INSTANCE.addListener(this);
     }
@@ -129,7 +135,8 @@ public class ThemePieChart extends PieChart implements SharedPreferences.OnShare
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        app.simple.inure.preferences.SharedPreferences.INSTANCE.getSharedPreferences().unregisterOnSharedPreferenceChangeListener(this);
+        app.simple.inure.preferences.SharedPreferences.INSTANCE
+                .getSharedPreferences().unregisterOnSharedPreferenceChangeListener(this);
         ThemeManager.INSTANCE.removeListener(this);
         if (NullSafety.INSTANCE.isNotNull(valueAnimator)) {
             valueAnimator.cancel();
@@ -156,7 +163,54 @@ public class ThemePieChart extends PieChart implements SharedPreferences.OnShare
         }
     }
     
+    /**
+     * Should animate the chart when data changes
+     * and when the chart is first drawn.
+     * This flag should also affect the hole radius animation
+     *
+     * @param animate true to animate the chart
+     */
     public void setAnimation(boolean animate) {
         this.animate = animate;
+    }
+    
+    public void enableChartLabels(PieDataSet dataSet) {
+        dataSet.setValueTextColor(ThemeManager.INSTANCE.getTheme().getTextViewTheme().getPrimaryTextColor());
+        dataSet.setValueTextSize(9F);
+        dataSet.setValueTypeface(TypeFace.INSTANCE.getRegularTypeFace(getContext()));
+        dataSet.setValueLineColor(ThemeManager.INSTANCE.getTheme().getTextViewTheme().getPrimaryTextColor());
+        dataSet.setValueLinePart1OffsetPercentage(80F);
+        setEntryLabelColor(ThemeManager.INSTANCE.getTheme().getTextViewTheme().getPrimaryTextColor());
+        setEntryLabelTextSize(9F);
+        setEntryLabelTypeface(TypeFace.INSTANCE.getRegularTypeFace(getContext()));
+        dataSet.setValueFormatter(new PercentFormatter(this));
+        dataSet.setXValuePosition(PieDataSet.ValuePosition.OUTSIDE_SLICE);
+        dataSet.setYValuePosition(PieDataSet.ValuePosition.OUTSIDE_SLICE);
+        dataSet.setDrawIcons(true);
+        setUsePercentValues(true);
+        notifyDataSetChanged();
+        invalidate();
+    }
+    
+    public void disableChartLabels(PieDataSet dataSet) {
+        dataSet.setValueTextColor(Color.TRANSPARENT);
+        dataSet.setValueTextSize(0F);
+        dataSet.setValueTypeface(TypeFace.INSTANCE.getRegularTypeFace(getContext()));
+        dataSet.setValueLineColor(Color.TRANSPARENT);
+        dataSet.setValueLinePart1OffsetPercentage(80F);
+        setEntryLabelColor(Color.TRANSPARENT);
+        setEntryLabelTextSize(0F);
+        setEntryLabelTypeface(TypeFace.INSTANCE.getRegularTypeFace(getContext()));
+        dataSet.setValueFormatter(null);
+        dataSet.setXValuePosition(PieDataSet.ValuePosition.OUTSIDE_SLICE);
+        dataSet.setYValuePosition(PieDataSet.ValuePosition.OUTSIDE_SLICE);
+        dataSet.setDrawIcons(false);
+        setUsePercentValues(false);
+        notifyDataSetChanged();
+        invalidate();
+    }
+    
+    public PieDataSet getExistingDataSet() {
+        return (PieDataSet) getData().getDataSet();
     }
 }

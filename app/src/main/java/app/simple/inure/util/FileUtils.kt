@@ -10,21 +10,28 @@ import android.util.Log
 import android.webkit.MimeTypeMap
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
-import app.simple.inure.constants.Extensions
-import java.io.*
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
 import java.nio.file.InvalidPathException
 import java.nio.file.Paths
-import java.util.*
+import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 object FileUtils {
 
+    const val FILE_MODE_READ = "r"
     private const val BUFFER = 1024
 
     fun openFolder(context: Context, location: String) {
         val intent = Intent(Intent.ACTION_VIEW)
-        val myDir: Uri = FileProvider.getUriForFile(context, context.applicationContext.packageName + ".provider", File(location))
+        val myDir: Uri = FileProvider.getUriForFile(
+                context, context.applicationContext.packageName + ".provider", File(location))
         intent.flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         intent.setDataAndType(myDir, DocumentsContract.Document.MIME_TYPE_DIR)
@@ -115,6 +122,15 @@ object FileUtils {
         return File(this)
     }
 
+    fun String?.toFileOrNull(): File? {
+        return try {
+            File(this!!)
+        } catch (ex: Exception) {
+            ex.printStackTrace()
+            null
+        }
+    }
+
     fun Uri.getMimeType(context: Context): String? {
         return if (ContentResolver.SCHEME_CONTENT == scheme) {
             context.contentResolver.getType(this)
@@ -166,11 +182,33 @@ object FileUtils {
         }
     }
 
-    fun String.isImageFile(): Boolean {
-        return Extensions.imageExtensions.contains(this.substring(this.lastIndexOf(".") + 1))
-    }
-
     fun String.makePathBashCompatible(): String {
         return this.replace(" ", "\\ ")
+    }
+
+    fun String.escapeSpecialCharactersForUnixPath(): String {
+        return this.replace("\\", "/")
+            .replace(" ", "\\ ")
+            .replace("(", "\\(")
+            .replace(")", "\\)")
+            .replace("'", "\\'")
+            .replace("&", "\\&")
+            .replace("`", "\\`")
+            .replace("!", "\\!")
+            .replace("\"", "\\\"")
+            .replace("#", "\\#")
+            .replace("$", "\\$")
+            .replace("%", "\\%")
+            .replace("^", "\\^")
+            .replace("*", "\\*")
+            .replace("?", "\\?")
+            .replace("{", "\\{")
+            .replace("}", "\\}")
+            .replace("[", "\\[")
+            .replace("]", "\\]")
+            .replace("<", "\\<")
+            .replace(">", "\\>")
+            .replace("|", "\\|")
+            .replace("-", "\\-")
     }
 }

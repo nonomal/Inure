@@ -8,15 +8,16 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
 import app.simple.inure.apk.parsers.FOSSParser
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
+import app.simple.inure.decorations.condensed.CondensedDynamicRippleConstraintLayout
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
-import app.simple.inure.decorations.ripple.DynamicRippleConstraintLayout
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.AppIconImageView
 import app.simple.inure.glide.modules.GlideApp
 import app.simple.inure.glide.util.ImageLoader.loadAppIcon
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
+import app.simple.inure.util.AdapterUtils.setAppVisualStates
 import app.simple.inure.util.FileUtils.toFile
-import app.simple.inure.util.PackageListUtils.setAppInfo
 import app.simple.inure.util.RecyclerViewUtils
 
 class AdapterFOSS : RecyclerView.Adapter<VerticalListViewHolder>() {
@@ -46,12 +47,12 @@ class AdapterFOSS : RecyclerView.Adapter<VerticalListViewHolder>() {
 
         if (holder is Holder) {
             holder.icon.transitionName = apps[position].packageName
-            holder.icon.loadAppIcon(apps[position].packageName, apps[position].applicationInfo.enabled, apps[position].applicationInfo.sourceDir.toFile())
-            holder.name.text = apps[position].applicationInfo.name
+            holder.icon.loadAppIcon(apps[position].packageName, apps[position].safeApplicationInfo.enabled, apps[position].safeApplicationInfo.sourceDir.toFile())
+            holder.name.text = apps[position].safeApplicationInfo.name
             holder.packageId.text = apps[position].packageName
-            holder.name.setStrikeThru(apps[position].applicationInfo.enabled)
-            holder.name.setFOSSIcon(FOSSParser.isPackageFOSS(apps[position].packageName))
-            holder.date.setAppInfo(apps[position])
+            holder.name.setAppVisualStates(apps[position])
+            holder.date.text = FOSSParser.getPackageLicense(apps[position]) ?: holder.itemView.context.getString(R.string.not_available)
+            holder.date.setWarningIcon(FOSSParser.isUserDefinedFOSS(apps[position].packageName))
 
             holder.container.setOnClickListener {
                 adapterCallbacks.onAppClicked(apps[position], holder.icon)
@@ -80,7 +81,9 @@ class AdapterFOSS : RecyclerView.Adapter<VerticalListViewHolder>() {
     override fun getItemViewType(position: Int): Int {
         return if (position == 0) {
             RecyclerViewUtils.TYPE_HEADER
-        } else RecyclerViewUtils.TYPE_ITEM
+        } else {
+            RecyclerViewUtils.TYPE_ITEM
+        }
     }
 
     override fun getItemId(position: Int): Long {
@@ -96,7 +99,7 @@ class AdapterFOSS : RecyclerView.Adapter<VerticalListViewHolder>() {
         val name: TypeFaceTextView = itemView.findViewById(R.id.adapter_recently_app_name)
         val packageId: TypeFaceTextView = itemView.findViewById(R.id.adapter_recently_app_package_id)
         val date: TypeFaceTextView = itemView.findViewById(R.id.adapter_recently_date)
-        val container: DynamicRippleConstraintLayout = itemView.findViewById(R.id.adapter_recently_container)
+        val container: CondensedDynamicRippleConstraintLayout = itemView.findViewById(R.id.adapter_recently_container)
     }
 
     inner class Header(itemView: View) : VerticalListViewHolder(itemView) {

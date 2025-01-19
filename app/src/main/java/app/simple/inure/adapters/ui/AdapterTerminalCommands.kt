@@ -5,16 +5,17 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import app.simple.inure.R
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
-import app.simple.inure.decorations.ripple.DynamicRippleLinearLayout
+import app.simple.inure.decorations.ripple.DynamicRippleMaterialCardView
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.interfaces.terminal.TerminalCommandCallbacks
 import app.simple.inure.models.TerminalCommand
 import app.simple.inure.util.DateUtils.toDate
 import app.simple.inure.util.RecyclerViewUtils
 
-class AdapterTerminalCommands(val terminalCommands: ArrayList<TerminalCommand>) : RecyclerView.Adapter<VerticalListViewHolder>() {
+class AdapterTerminalCommands(private val terminalCommands: ArrayList<TerminalCommand>) : RecyclerView.Adapter<VerticalListViewHolder>() {
 
     private var terminalCommandCallbacks: TerminalCommandCallbacks? = null
 
@@ -41,7 +42,7 @@ class AdapterTerminalCommands(val terminalCommands: ArrayList<TerminalCommand>) 
         if (holder is Holder) {
             holder.label.text = terminalCommands[position].label
             holder.command.text = "cmd: " + terminalCommands[position].command
-            holder.timestamp.text = terminalCommands[position].dateCreated.toDate()
+            holder.timestamp.text = holder.context.getString(R.string.edited_on, terminalCommands[position].dateCreated.toDate())
 
             if (terminalCommands[position].arguments.isNullOrEmpty()) {
                 holder.arguments.text = "args: ${holder.getString(R.string.unspecified).lowercase()}"
@@ -105,10 +106,18 @@ class AdapterTerminalCommands(val terminalCommands: ArrayList<TerminalCommand>) 
         val arguments: TypeFaceTextView = itemView.findViewById(R.id.arguments)
         val timestamp: TypeFaceTextView = itemView.findViewById(R.id.timestamp)
         val description: TypeFaceTextView = itemView.findViewById(R.id.description)
-        val container: DynamicRippleLinearLayout = itemView.findViewById(R.id.container)
+        val container: DynamicRippleMaterialCardView = itemView.findViewById(R.id.container)
+
+        init {
+            (itemView.layoutParams as StaggeredGridLayoutManager.LayoutParams).isFullSpan = false
+        }
     }
 
     inner class Header(itemView: View) : VerticalListViewHolder(itemView) {
         val total: TypeFaceTextView = itemView.findViewById(R.id.total)
+
+        init {
+            (itemView.layoutParams as StaggeredGridLayoutManager.LayoutParams).isFullSpan = true
+        }
     }
 }

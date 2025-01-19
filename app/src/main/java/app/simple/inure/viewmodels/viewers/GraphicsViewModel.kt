@@ -6,10 +6,12 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.apk.parsers.APKParser
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.WrappedViewModel
+import app.simple.inure.models.Graphic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.util.*
+import java.util.Locale
 
 class GraphicsViewModel(application: Application, val packageInfo: PackageInfo) : WrappedViewModel(application) {
 
@@ -19,25 +21,25 @@ class GraphicsViewModel(application: Application, val packageInfo: PackageInfo) 
             getGraphicsData()
         }
 
-    private val graphics: MutableLiveData<MutableList<String>> by lazy {
-        MutableLiveData<MutableList<String>>().also {
+    private val graphics: MutableLiveData<MutableList<Graphic>> by lazy {
+        MutableLiveData<MutableList<Graphic>>().also {
             getGraphicsData()
         }
     }
 
-    fun getGraphics(): LiveData<MutableList<String>> {
+    fun getGraphics(): LiveData<MutableList<Graphic>> {
         return graphics
     }
 
     private fun getGraphicsData() {
         viewModelScope.launch(Dispatchers.Default) {
             kotlin.runCatching {
-                with(APKParser.getGraphicsFiles(packageInfo.applicationInfo.sourceDir, keyword)) {
+                with(APKParser.getGraphicsFiles(packageInfo.safeApplicationInfo.sourceDir, keyword)) {
                     if (this.isEmpty() && keyword.isEmpty()) throw NullPointerException()
 
                     graphics.postValue(apply {
                         sortBy {
-                            it.lowercase(Locale.getDefault())
+                            it.name.lowercase(Locale.getDefault())
                         }
                     })
                 }

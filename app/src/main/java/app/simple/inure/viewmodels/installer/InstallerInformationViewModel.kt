@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.pm.PackageInfo
 import android.os.Build
 import android.text.Spannable
-import androidx.annotation.StringRes
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
@@ -14,16 +13,19 @@ import app.simple.inure.apk.parsers.APKParser.getDexData
 import app.simple.inure.apk.parsers.APKParser.getGlEsVersion
 import app.simple.inure.apk.parsers.APKParser.getMinSDK
 import app.simple.inure.apk.parsers.APKParser.getNativeLibraries
+import app.simple.inure.apk.utils.MetaUtils
 import app.simple.inure.apk.utils.PackageUtils
 import app.simple.inure.apk.utils.PackageUtils.getApplicationInstallTime
 import app.simple.inure.apk.utils.PackageUtils.getApplicationLastUpdateTime
 import app.simple.inure.apk.utils.PackageUtils.getPackageArchiveInfo
-import app.simple.inure.apk.utils.PackageUtils.getPackageInfo
-import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
+import app.simple.inure.apk.utils.PackageUtils.getXposedDescription
+import app.simple.inure.apk.utils.PackageUtils.isBackupAllowed
+import app.simple.inure.apk.utils.PackageUtils.isXposedModule
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.WrappedViewModel
 import app.simple.inure.preferences.FormattingPreferences
 import app.simple.inure.util.NullSafety.isNotNull
-import app.simple.inure.util.SDKHelper
+import app.simple.inure.util.SDKUtils
 import app.simple.inure.util.StringUtils.applyAccentColor
 import app.simple.inure.util.StringUtils.applySecondaryTextColor
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +39,7 @@ class InstallerInformationViewModel(application: Application, private val file: 
     private var packageInfo: PackageInfo? = null
 
     private val information: MutableLiveData<ArrayList<Pair<Int, Spannable>>> by lazy {
-        MutableLiveData<ArrayList<Pair<@StringRes Int, Spannable>>>().also {
+        MutableLiveData<ArrayList<Pair<Int, Spannable>>>().also {
             viewModelScope.launch(Dispatchers.IO) {
                 loadInformation()
             }
@@ -52,8 +54,13 @@ class InstallerInformationViewModel(application: Application, private val file: 
         kotlin.runCatching {
             packageInfo = packageManager.getPackageArchiveInfo(file)
 
-            if (packageManager.isPackageInstalled(packageName = packageInfo!!.packageName)) {
-                packageInfo = packageManager.getPackageInfo(packageInfo!!.packageName)
+            //            if (packageManager.isPackageInstalled(packageName = packageInfo!!.packageName)) {
+            //                val existingPackage = packageManager.getPackageInfo(packageInfo!!.packageName)!!
+            //                packageInfo?.applicationInfo?.uid = existingPackage.applicationInfo.uid
+            //            }
+
+            if (packageInfo!!.packageName.isEmpty()) {
+                throw NullPointerException("package is invalid")
             }
         }.onFailure {
             postError(it)
@@ -65,9 +72,10 @@ class InstallerInformationViewModel(application: Application, private val file: 
         list.add(getPackageName())
         list.add(getVersion())
         list.add(getVersionCode())
+        list.add(getBackup())
 
         if (packageInfo.isNotNull()) {
-            list.add(getUID())
+            // list.add(getUID())
             list.add(getInstallDate())
             list.add(getUpdateDate())
             list.add(getInstallerName())
@@ -75,6 +83,12 @@ class InstallerInformationViewModel(application: Application, private val file: 
 
         list.add(getMinSDK())
         list.add(getTargetSDK())
+        list.add(getXposedModule())
+
+        if (packageInfo.isNotNull() && packageInfo!!.safeApplicationInfo.isXposedModule()) {
+            list.add(getXposedDescription())
+        }
+
         list.add(getGlesVersion())
         list.add(getArchitecture())
         list.add(getNativeLibraries())
@@ -106,6 +120,16 @@ class InstallerInformationViewModel(application: Application, private val file: 
         }
     }
 
+    private fun getBackup(): Pair<Int, Spannable> {
+        val isBackupAllowed = packageInfo?.isBackupAllowed() ?: false
+        val spannable = if (isBackupAllowed) {
+            getString(R.string.allowed)
+        } else {
+            getString(R.string.not_allowed)
+        }
+        return Pair(R.string.backup, spannable.applySecondaryTextColor())
+    }
+
     private fun getApkPath(): Pair<Int, Spannable> {
         return Pair(R.string.apk_base_package,
                     file.path.applySecondaryTextColor())
@@ -134,7 +158,7 @@ class InstallerInformationViewModel(application: Application, private val file: 
 
     private fun getUID(): Pair<Int, Spannable> {
         return Pair(R.string.uid,
-                    packageInfo!!.applicationInfo.uid.toString().applySecondaryTextColor())
+                    packageInfo!!.safeApplicationInfo.uid.toString().applySecondaryTextColor())
     }
 
     private fun getInstallDate(): Pair<Int, Spannable> {
@@ -150,8 +174,8 @@ class InstallerInformationViewModel(application: Application, private val file: 
     private fun getMinSDK(): Pair<Int, Spannable> {
         val minSdk = kotlin.runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                "${packageInfo!!.applicationInfo.minSdkVersion}," +
-                        " ${SDKHelper.getSdkTitle(packageInfo!!.applicationInfo!!.minSdkVersion)}"
+                "${packageInfo!!.safeApplicationInfo.minSdkVersion}," +
+                        " ${SDKUtils.getSdkTitle(packageInfo!!.safeApplicationInfo.minSdkVersion)}"
             } else {
                 file.getMinSDK()
             }
@@ -165,14 +189,31 @@ class InstallerInformationViewModel(application: Application, private val file: 
 
     private fun getTargetSDK(): Pair<Int, Spannable> {
         val targetSdk = kotlin.runCatching {
-            "${packageInfo!!.applicationInfo.targetSdkVersion}, " +
-                    SDKHelper.getSdkTitle(packageInfo!!.applicationInfo.targetSdkVersion)
+            "${packageInfo!!.safeApplicationInfo.targetSdkVersion}, " +
+                    SDKUtils.getSdkTitle(packageInfo!!.safeApplicationInfo.targetSdkVersion)
         }.getOrElse {
             it.message!!
         }
 
         return Pair(R.string.target_sdk,
                     targetSdk.applyAccentColor())
+    }
+
+    private fun getXposedModule(): Pair<Int, Spannable> {
+        val string = buildString {
+            if (packageInfo!!.safeApplicationInfo.isXposedModule()) {
+                append(getString(R.string.yes))
+            } else {
+                append(getString(R.string.no))
+            }
+        }
+
+        return Pair(R.string.xposed_module, string.applySecondaryTextColor())
+    }
+
+    private fun getXposedDescription(): Pair<Int, Spannable> {
+        return Pair(R.string.description,
+                    packageInfo!!.safeApplicationInfo.getXposedDescription().applySecondaryTextColor())
     }
 
     private fun getMethodCount(): Pair<Int, Spannable> {
@@ -219,12 +260,20 @@ class InstallerInformationViewModel(application: Application, private val file: 
         val features = StringBuilder()
 
         try {
-            for (feature in packageInfo!!.reqFeatures) {
+            for (feature in packageInfo!!.reqFeatures!!) {
                 if (features.isEmpty()) {
-                    features.append(feature.name)
+                    if (feature.name.isNullOrEmpty()) {
+                        features.append(MetaUtils.getOpenGL(feature.reqGlEsVersion))
+                    } else {
+                        features.append(feature.name)
+                    }
                 } else {
                     features.append("\n")
-                    features.append(feature.name)
+                    if (feature.name.isNullOrEmpty()) {
+                        features.append(MetaUtils.getOpenGL(feature.reqGlEsVersion))
+                    } else {
+                        features.append(feature.name)
+                    }
                 }
             }
         } catch (e: NullPointerException) {

@@ -35,6 +35,8 @@
 
     <androidx.coordinatorlayout.widget.CoordinatorLayout
         android:layout_width="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:layout_height="match_parent">
 
         <app.simple.inure.decorations.edgeeffect.EdgeEffectNestedScrollView
@@ -42,12 +44,15 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
+            android:clipChildren="false"
             android:paddingBottom="10dp"
             app:layout_behavior="@string/over_scroll_behavior">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
                 android:orientation="vertical">
 
                 <app.simple.inure.decorations.theme.ThemeDivider
@@ -119,7 +124,7 @@
                         app:layout_constraintTop_toBottomOf="@id/typeFaceTextView07"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/appearance_switch_dim_windows"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -133,7 +138,7 @@
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/appearance_blur_window"
+                    android:id="@+id/blur_windows_container"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginHorizontal="10dp"
@@ -162,7 +167,7 @@
                         android:text="@string/blur_windows"
                         android:textSize="@dimen/preferences_title_text_size"
                         app:appFontStyle="bold"
-                        app:drawableEndCompat="@drawable/ic_warning_tiny"
+                        app:drawableEndCompat="@drawable/ic_warning_12dp"
                         app:drawableTintStyle="warning"
                         app:layout_constraintBottom_toTopOf="@+id/typeFaceTextView80"
                         app:layout_constraintEnd_toStartOf="@+id/appearance_switch_blur_windows"
@@ -188,7 +193,7 @@
                         app:layout_constraintTop_toBottomOf="@id/typeFaceTextView170"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/appearance_switch_blur_windows"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -255,7 +260,7 @@
                         app:layout_constraintTop_toBottomOf="@id/typeFaceTextView09"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/appearance_switch_shadows"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -332,7 +337,7 @@
                         app:layout_constraintTop_toBottomOf="@id/typeFaceTextView12"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/appearance_transition_switch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -470,7 +475,7 @@
                         app:layout_constraintTop_toBottomOf="@id/typeFaceTextView14"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/appearance_animations_switch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -607,7 +612,7 @@
                         app:layout_constraintTop_toBottomOf="@id/typeFaceTextView17"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/appearance_marquee_switch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -805,7 +810,7 @@
                         app:layout_constraintTop_toBottomOf="@id/skip_loading_title"
                         app:textColorStyle="tertiary" />
 
-                    <app.simple.inure.decorations.switchview.SwitchView
+                    <app.simple.inure.decorations.toggles.Switch
                         android:id="@+id/skip_loading_switch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"

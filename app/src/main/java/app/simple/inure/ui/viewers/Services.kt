@@ -9,15 +9,18 @@ import android.view.ViewGroup
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterServices
+import app.simple.inure.adapters.viewers.AdapterServices
 import app.simple.inure.constants.BundleConstants
+import app.simple.inure.constants.Warnings
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.dialogs.action.ComponentState
+import app.simple.inure.dialogs.action.ComponentState.Companion.showComponentStateDialog
 import app.simple.inure.extensions.fragments.SearchBarScopedFragment
 import app.simple.inure.extensions.popup.PopupMenuCallback
 import app.simple.inure.factories.panels.PackageInfoFactory
 import app.simple.inure.models.ServiceInfoModel
 import app.simple.inure.popups.viewers.PopupServicesMenu
+import app.simple.inure.preferences.ConfigurationPreferences
 import app.simple.inure.preferences.ServicesPreferences
 import app.simple.inure.ui.subviewers.ServiceInfo
 import app.simple.inure.viewmodels.viewers.ServicesViewModel
@@ -52,36 +55,40 @@ class Services : SearchBarScopedFragment() {
 
         servicesViewModel.getServices().observe(viewLifecycleOwner) {
             adapterServices = AdapterServices(it, packageInfo, searchBox.text.toString().trim())
-            recyclerView.adapter = adapterServices
+            setCount(it.size)
 
             adapterServices?.setOnServiceCallbackListener(object : AdapterServices.Companion.ServicesCallbacks {
                 override fun onServiceClicked(serviceInfoModel: ServiceInfoModel) {
-                    openFragmentSlide(ServiceInfo.newInstance(serviceInfoModel, packageInfo), "services_info")
+                    openFragmentSlide(ServiceInfo.newInstance(serviceInfoModel, packageInfo), ServiceInfo.TAG)
                 }
 
                 override fun onServiceLongPressed(packageId: String, packageInfo: PackageInfo, icon: View, isComponentEnabled: Boolean, position: Int) {
-                    PopupServicesMenu(requireView(), isComponentEnabled).setOnMenuClickListener(object : PopupMenuCallback {
-                        override fun onMenuItemClicked(source: String) {
-                            when (source) {
-                                getString(R.string.enable), getString(R.string.disable) -> {
-                                    val p = ComponentState.newInstance(packageInfo, packageId, isComponentEnabled)
-                                    p.setOnComponentStateChangeListener(object : ComponentState.Companion.ComponentStatusCallbacks {
-                                        override fun onSuccess() {
-                                            adapterServices?.notifyItemChanged(position)
-                                        }
-                                    })
-                                    p.show(childFragmentManager, "component_state")
+                    if (ConfigurationPreferences.isRootOrShizuku()) {
+                        PopupServicesMenu(requireView(), isComponentEnabled).setOnMenuClickListener(object : PopupMenuCallback {
+                            override fun onMenuItemClicked(source: String) {
+                                when (source) {
+                                    getString(R.string.enable), getString(R.string.disable) -> {
+                                        showComponentStateDialog(packageInfo, packageId, isComponentEnabled, object : ComponentState.Companion.ComponentStatusCallbacks {
+                                            override fun onSuccess() {
+                                                adapterServices?.notifyItemChanged(position)
+                                            }
+                                        })
+                                    }
                                 }
                             }
-                        }
-                    })
+                        })
+                    } else {
+                        showWarning(Warnings.ROOT_OR_SHIZUKU_REQUIRED, false)
+                    }
                 }
             })
 
-            searchBox.doOnTextChanged { text, _, _, _ ->
-                if (searchBox.isFocused) {
-                    servicesViewModel.getServicesData(text.toString().trim())
-                }
+            recyclerView.setExclusiveAdapter(adapterServices)
+        }
+
+        searchBox.doOnTextChanged { text, _, _, _ ->
+            if (searchBox.isFocused) {
+                servicesViewModel.getServicesData(text.toString().trim())
             }
         }
 
@@ -104,7 +111,7 @@ class Services : SearchBarScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            ServicesPreferences.servicesSearch -> {
+            ServicesPreferences.SERVICES_SEARCH -> {
                 searchBoxState(animate = true, ServicesPreferences.isSearchVisible())
             }
         }
@@ -119,5 +126,7 @@ class Services : SearchBarScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "services"
     }
 }

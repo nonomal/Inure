@@ -5,6 +5,9 @@ import android.content.pm.PackageManager
 import android.content.pm.PermissionInfo
 import android.os.Build
 import app.simple.inure.R
+import app.simple.inure.util.ArrayUtils.toArrayList
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 object PermissionUtils {
 
@@ -17,6 +20,15 @@ object PermissionUtils {
     private const val PROTECTION_FLAG_INCIDENT_REPORT_APPROVER = 0x100000
     private const val PROTECTION_FLAG_APP_PREDICTOR = 0x200000
     private const val PROTECTION_FLAG_RETAIL_DEMO = 0x1000000
+
+    private val exceptionPermissions = arrayOf(
+            "android.permission.WRITE_SECURE_SETTINGS",
+            "android.permission.DUMP",
+            "android.permission.READ_LOGS",
+            "android.permission.READ_FRAME_BUFFER",
+            "android.permission.PACKAGE_USAGE_STATS",
+            "android.permission.INTERACT_ACROSS_USERS",
+    )
 
     fun String.getPermissionInfo(context: Context): PermissionInfo? {
         try {
@@ -44,6 +56,30 @@ object PermissionUtils {
                 else -> false
             }
         }
+    }
+
+    fun getPermissionMap(): HashMap<String, String> {
+        val bufferedReader = BufferedReader(
+                InputStreamReader(PermissionUtils::class.java.getResourceAsStream("/permissions.txt")))
+        val permissionList = bufferedReader.readLines()
+        val map = HashMap<String, String>()
+
+        permissionList.forEach {
+            val shortName = it.substring(it.lastIndexOf(".") + 1)
+            map[shortName] = it
+        }
+
+        return map
+    }
+
+    fun getAndroidPermissionList(): List<String> {
+        val bufferedReader = BufferedReader(
+                InputStreamReader(PermissionUtils::class.java.getResourceAsStream("/permissions.txt")))
+        return bufferedReader.readLines().toArrayList().sorted()
+    }
+
+    fun PermissionInfo.isException(): Boolean {
+        return name in exceptionPermissions
     }
 
     @Suppress("deprecation")
@@ -118,9 +154,15 @@ object PermissionUtils {
         return protection
     }
 
-    fun Context.getPermissionDescription(name: String): String {
+    fun Context.getPermissionDescription(name: String?): String {
         kotlin.runCatching {
-            return name.getPermissionInfo(this)!!.loadDescription(packageManager).toString()
+            val desc = name!!.getPermissionInfo(this)!!.loadDescription(packageManager)
+
+            return if (desc.isNullOrEmpty()) {
+                getString(R.string.desc_not_available)
+            } else {
+                desc.toString()
+            }
         }.getOrElse {
             return getString(R.string.desc_not_available)
         }

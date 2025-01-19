@@ -16,6 +16,7 @@
 
 package app.simple.inure.terminal;
 
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
@@ -23,7 +24,6 @@ import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.preference.PreferenceManager;
 import android.util.Log;
 
 import java.io.File;
@@ -43,10 +43,10 @@ public class RemoteInterface extends BaseActivity {
     protected static final String PRIVEXTRA_TARGET_WINDOW = "inure.terminal.private.target_window";
     protected static final String PRIVACT_ACTIVITY_ALIAS = "inure.terminal.TermInternal";
     
-    private TermSettings mSettings;
+    private TermSettings termSettings;
     
     private TermService termService;
-    private Intent mTSIntent;
+    private Intent termServiceIntent;
     
     /**
      * Quote a string so it can be used as a parameter in bash and similar shells.
@@ -69,21 +69,40 @@ public class RemoteInterface extends BaseActivity {
     
     protected void handleIntent() {
         TermService service = getTermService();
+        
         if (service == null) {
             finish();
             return;
         }
         
-        Intent myIntent = getIntent();
-        String action = myIntent.getAction();
-        if (action.equals(Intent.ACTION_SEND) && myIntent.hasExtra(Intent.EXTRA_STREAM)) {
-            /* "permission.RUN_SCRIPT" not required as this is merely opening a new window. */
-            Object extraStream = myIntent.getExtras().get(Intent.EXTRA_STREAM);
-            if (extraStream instanceof Uri) {
-                String path = ((Uri) extraStream).getPath();
-                File file = new File(path);
-                String dirPath = file.isDirectory() ? path : file.getParent();
-                openNewWindow("cd " + quoteForBash(dirPath));
+        Intent intent = getIntent();
+        String action = intent.getAction();
+        
+        if (action.equals(Intent.ACTION_VIEW) || action.equals("org.openintents.action.VIEW_DIRECTORY")) {
+            Uri data = intent.getData();
+            
+            if (data != null) {
+                String path = data.getPath();
+                
+                if (path != null) {
+                    File file = new File(path);
+                    String dirPath;
+                    
+                    if (file.canRead()) {
+                        Log.d(TermDebug.LOG_TAG, "File can be read");
+                        dirPath = file.isDirectory() ? file.getPath() : file.getParent();
+                    } else {
+                        Log.d(TermDebug.LOG_TAG, "File cannot be read");
+                        dirPath = file.getPath();
+                    }
+                    
+                    String initialCommand = "cd " + quoteForBash(dirPath);
+                    
+                    Log.d(TermDebug.LOG_TAG, "Opening directory: " + dirPath + "from path: " + path);
+                    openNewWindow(initialCommand);
+                } else {
+                    showWarning("Cannot open content:// URIs post SDK 25", true);
+                }
             }
         } else {
             // Intent sender may not have permissions, ignore any extras
@@ -96,12 +115,12 @@ public class RemoteInterface extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-    
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        mSettings = new TermSettings(getResources(), prefs);
-    
+        
+        SharedPreferences prefs = app.simple.inure.preferences.SharedPreferences.INSTANCE.getSharedPreferences(this);
+        termSettings = new TermSettings(getResources(), prefs);
+        
         Intent TSIntent = new Intent(this, TermService.class);
-        mTSIntent = TSIntent;
+        termServiceIntent = TSIntent;
         startService(TSIntent);
         if (!bindService(TSIntent, terminalServiceConnection, BIND_AUTO_CREATE)) {
             Log.e(TermDebug.LOG_TAG, "bind to service failed!");
@@ -119,16 +138,18 @@ public class RemoteInterface extends BaseActivity {
             TermService service = termService;
             if (service != null) {
                 SessionList sessions = service.getSessions();
-                if (sessions == null || sessions.size() == 0) {
-                    stopService(mTSIntent);
+                if (sessions == null || sessions.isEmpty()) {
+                    stopService(termServiceIntent);
                 }
             }
-    
+            
             terminalServiceConnection = null;
             termService = null;
         }
         super.finish();
-    }    private ServiceConnection terminalServiceConnection = new ServiceConnection() {
+    }
+    
+    private ServiceConnection terminalServiceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder service) {
             TermService.TSBinder binder = (TermService.TSBinder) service;
             termService = binder.getService();
@@ -145,11 +166,9 @@ public class RemoteInterface extends BaseActivity {
         return termService;
     }
     
-
-    
     protected String openNewWindow(String iInitialCommand) {
         TermService service = getTermService();
-    
+        
         String initialCommand = ShellPreferences.INSTANCE.getInitialCommand();
         Log.d(TermDebug.LOG_TAG, "initialCommand: " + initialCommand);
         if (iInitialCommand != null) {
@@ -164,22 +183,23 @@ public class RemoteInterface extends BaseActivity {
         }
         
         try {
-            TermSession session = Term.createTermSession(this, mSettings, initialCommand);
+            TermSession session = Term.createTermSession(this, termSettings, initialCommand);
             
             session.setFinishCallback(service);
             service.getSessions().add(session);
-    
+            service.setWindowId(service.getSessions().indexOf(session));
+            
             String handle = UUID.randomUUID().toString();
             ((GenericTermSession) session).setHandle(handle);
-    
+            
             Intent intent = new Intent(PRIVACT_OPEN_NEW_WINDOW);
             intent.addCategory(Intent.CATEGORY_DEFAULT);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
-    
+            
             return handle;
-        } catch (
-                IOException e) {
+        } catch (IOException | ActivityNotFoundException e) {
+            Log.e(TermDebug.LOG_TAG, "Couldn't create new window: " + e.getMessage());
             return null;
         }
     }
@@ -196,9 +216,12 @@ public class RemoteInterface extends BaseActivity {
             String h = session.getHandle();
             if (h != null && h.equals(handle)) {
                 target = session;
+                Log.d(TermDebug.LOG_TAG, "Found target window: " + index);
                 break;
             }
         }
+        
+        Log.e(TermDebug.LOG_TAG, "Target window not found, opening new one");
         
         if (target == null) {
             // Target window not found, open a new one
@@ -217,5 +240,10 @@ public class RemoteInterface extends BaseActivity {
         startActivity(intent);
         
         return handle;
+    }
+    
+    private boolean isContentUri(Uri uri) {
+        String scheme = uri.getScheme();
+        return scheme != null && scheme.equals("content");
     }
 }

@@ -19,15 +19,21 @@ import app.simple.inure.constants.Misc;
 import app.simple.inure.decorations.corners.LayoutBackground;
 import app.simple.inure.preferences.AccessibilityPreferences;
 import app.simple.inure.preferences.AppearancePreferences;
+import app.simple.inure.preferences.DevelopmentPreferences;
 import app.simple.inure.themes.interfaces.ThemeChangedListener;
 import app.simple.inure.themes.manager.Theme;
 import app.simple.inure.themes.manager.ThemeManager;
+import app.simple.inure.util.ColorUtils;
 import app.simple.inure.util.ViewUtils;
 
 public class DynamicRippleLinearLayoutWithFactor extends LinearLayout implements ThemeChangedListener, SharedPreferences.OnSharedPreferenceChangeListener {
     
+    private int highlightColor = -1;
+    private int rippleColor = -1;
+    
     public DynamicRippleLinearLayoutWithFactor(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
+        rippleColor = AppearancePreferences.INSTANCE.getAccentColor();
         setBackgroundColor(Color.TRANSPARENT);
     }
     
@@ -41,7 +47,7 @@ public class DynamicRippleLinearLayoutWithFactor extends LinearLayout implements
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN: {
+            case MotionEvent.ACTION_DOWN -> {
                 if (AccessibilityPreferences.INSTANCE.isHighlightMode()) {
                     animate()
                             .scaleY(0.8F)
@@ -51,7 +57,7 @@ public class DynamicRippleLinearLayoutWithFactor extends LinearLayout implements
                             .setDuration(getResources().getInteger(R.integer.animation_duration))
                             .start();
                 }
-    
+                
                 try {
                     if (event.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) {
                         if (event.getAction() == MotionEvent.ACTION_DOWN) {
@@ -76,9 +82,7 @@ public class DynamicRippleLinearLayoutWithFactor extends LinearLayout implements
                     return super.onTouchEvent(event);
                 }
             }
-            case MotionEvent.ACTION_MOVE:
-            case MotionEvent.ACTION_CANCEL:
-            case MotionEvent.ACTION_UP: {
+            case MotionEvent.ACTION_MOVE, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
                 if (AccessibilityPreferences.INSTANCE.isHighlightMode()) {
                     animate()
                             .scaleY(1F)
@@ -89,7 +93,6 @@ public class DynamicRippleLinearLayoutWithFactor extends LinearLayout implements
                             .setDuration(getResources().getInteger(R.integer.animation_duration))
                             .start();
                 }
-                break;
             }
         }
         return super.onTouchEvent(event);
@@ -110,12 +113,22 @@ public class DynamicRippleLinearLayoutWithFactor extends LinearLayout implements
     
     private void setHighlightBackgroundColor() {
         if (AccessibilityPreferences.INSTANCE.isHighlightMode()) {
-            LayoutBackground.setBackground(getContext(), this, null, Misc.roundedCornerFactor);
-            setBackgroundTintList(ColorStateList.valueOf(ThemeManager.INSTANCE.getTheme().getViewGroupTheme().getHighlightBackground()));
+            if (highlightColor == -1) {
+                LayoutBackground.setBackground(getContext(), this, null, Misc.roundedCornerFactor, highlightColor);
+                setBackgroundTintList(ColorStateList.valueOf(ThemeManager.INSTANCE.getTheme().getViewGroupTheme().getHighlightBackground()));
+            } else {
+                LayoutBackground.setBackground(getContext(), this, null, Misc.roundedCornerFactor, highlightColor);
+                setBackgroundTintList(ColorStateList.valueOf(ColorUtils.INSTANCE.changeAlpha(highlightColor, Misc.highlightColorAlpha)));
+            }
         } else {
             setBackground(null);
-            setBackground(Utils.getRippleDrawable(getBackground(), Misc.roundedCornerFactor));
+            setBackground(Utils.getCustomRippleDrawable(getBackground(), rippleColor, Misc.roundedCornerFactor));
         }
+    }
+    
+    public void setRippleColor(int rippleColor) {
+        this.rippleColor = rippleColor;
+        setHighlightBackgroundColor();
     }
     
     @Override
@@ -139,8 +152,16 @@ public class DynamicRippleLinearLayoutWithFactor extends LinearLayout implements
     
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        if (Objects.equals(key, AppearancePreferences.accentColor)) {
+        if (Objects.equals(key, AppearancePreferences.ACCENT_COLOR)) {
             setHighlightBackgroundColor();
+        }
+    }
+    
+    public void setHighlightColor(int highlightColor) {
+        if (DevelopmentPreferences.INSTANCE.get(DevelopmentPreferences.USE_COLORFUL_HIGHLIGHT)) {
+            this.highlightColor = highlightColor;
+        } else {
+            this.highlightColor = -1;
         }
     }
 }

@@ -12,7 +12,8 @@ import android.widget.ImageView
 import androidx.core.app.SharedElementCallback
 import androidx.core.net.toUri
 import androidx.core.view.doOnPreDraw
-import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import app.simple.inure.R
 import app.simple.inure.adapters.music.AdapterMusic
@@ -20,17 +21,21 @@ import app.simple.inure.constants.BottomMenuConstants
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.dialogs.app.Sure.Companion.newSureInstance
+import app.simple.inure.dialogs.miscellaneous.StoragePermission
+import app.simple.inure.dialogs.miscellaneous.StoragePermission.Companion.showStoragePermissionDialog
 import app.simple.inure.extensions.fragments.KeyboardScopedFragment
 import app.simple.inure.interfaces.fragments.SureCallbacks
 import app.simple.inure.interfaces.menus.PopupMusicMenuCallbacks
 import app.simple.inure.models.AudioModel
 import app.simple.inure.popups.music.PopupMusicMenu
 import app.simple.inure.popups.music.PopupMusicSort
+import app.simple.inure.preferences.DevelopmentPreferences
 import app.simple.inure.preferences.MusicPreferences
 import app.simple.inure.services.AudioServicePager
 import app.simple.inure.ui.subpanels.MusicSearch
-import app.simple.inure.ui.viewers.AudioPlayerPager
+import app.simple.inure.ui.viewers.AudioPlayer
 import app.simple.inure.util.ConditionUtils.invert
+import app.simple.inure.util.PermissionUtils.checkStoragePermission
 import app.simple.inure.util.StatusBarHeight
 import app.simple.inure.viewmodels.panels.MusicViewModel
 
@@ -39,7 +44,7 @@ class Music : KeyboardScopedFragment() {
     private lateinit var recyclerView: CustomVerticalRecyclerView
 
     private var adapterMusic: AdapterMusic? = null
-    private val musicViewModel: MusicViewModel by viewModels()
+    private val musicViewModel: MusicViewModel by activityViewModels()
 
     private var deletedId = -1L
     private var displayHeight: Int = 0
@@ -57,34 +62,36 @@ class Music : KeyboardScopedFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         postponeEnterTransition()
-        fullVersionCheck()
+
+        if (fullVersionCheck()) {
+            if (requireContext().checkStoragePermission()) {
+                if (musicViewModel.shouldShowLoader()) {
+                    showLoader(true)
+                }
+            } else {
+                childFragmentManager.showStoragePermissionDialog()
+                    .setStoragePermissionCallbacks(object : StoragePermission.Companion.StoragePermissionCallbacks {
+                        override fun onStoragePermissionGranted() {
+                            showLoader(true)
+                            musicViewModel.refresh()
+                        }
+                    })
+            }
+        }
 
         musicViewModel.getSongs().observe(viewLifecycleOwner) { audioModels ->
+            hideLoader()
             adapterMusic = AdapterMusic(audioModels, headerMode = true)
 
             adapterMusic?.setOnMusicCallbackListener(object : AdapterMusic.Companion.MusicCallbacks {
                 override fun onMusicClicked(audioModel: AudioModel, art: ImageView, position: Int) {
-                    //                    val intent = Intent(requireContext(), AudioPlayerActivity::class.java)
-                    //                    intent.data = uri
-                    //
-                    //                    if (BehaviourPreferences.isArcAnimationOn()) {
-                    //                        Log.d("Music", art.transitionName)
-                    //                        val options = ActivityOptionsCompat.makeSceneTransitionAnimation(requireActivity(), art, art.transitionName)
-                    //                        startActivity(intent, options.toBundle())
-                    //                    } else {
-                    //                        startActivity(intent)
-                    //                    }
-
-                    openFragmentArc(AudioPlayerPager.newInstance(position), art, "audio_player_pager")
-                    requireArguments().putInt(BundleConstants.position, position)
+                    openAudioPlayer(position, art)
                 }
 
                 override fun onMusicLongClicked(audioModel: AudioModel, view: ImageView, position: Int, container: View) {
                     PopupMusicMenu(requireView(), audioModel.fileUri.toUri()).setOnPopupMusicMenuCallbacks(object : PopupMusicMenuCallbacks {
                         override fun onPlay(uri: Uri) {
-                            openFragmentArc(AudioPlayerPager.newInstance(position), view, "audio_player_pager")
-                            MusicPreferences.setMusicPosition(position)
-                            MusicPreferences.setLastMusicId(audioModel.id)
+                            openAudioPlayer(position, view)
                         }
 
                         override fun onDelete(uri: Uri) {
@@ -143,6 +150,27 @@ class Music : KeyboardScopedFragment() {
                 }
             })
 
+            if (DevelopmentPreferences.get(DevelopmentPreferences.USE_PERISTYLE_INTERFACE)) {
+                val gridLayoutManager = GridLayoutManager(requireContext(), 2)
+
+                gridLayoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                    override fun getSpanSize(position: Int): Int {
+                        return if (position % 5 == 0) {
+                            2
+                        } else {
+                            1
+                        }
+                    }
+                }
+
+                recyclerView.layoutManager = gridLayoutManager
+
+                // Remove fading edge effect
+                recyclerView.isVerticalFadingEdgeEnabled = false
+            } else {
+                recyclerView.layoutManager = LinearLayoutManager(requireContext())
+            }
+
             recyclerView.adapter = adapterMusic
 
             if (requireArguments().getInt(BundleConstants.position, MusicPreferences.getMusicPosition()) == MusicPreferences.getMusicPosition()) {
@@ -161,18 +189,39 @@ class Music : KeyboardScopedFragment() {
                         PopupMusicSort(view)
                     }
                     R.drawable.shuffle -> {
-                        (recyclerView.layoutManager as LinearLayoutManager).scrollToPositionWithOffset((0..audioModels.size).random(), displayHeight / 2)
+                        val randomPosition = (0 until audioModels.size).random()
+                        MusicPreferences.setMusicPosition(randomPosition)
+                        (recyclerView.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(randomPosition, displayHeight / 2)
+
+                        postDelayed(500) {
+                            runCatching {
+                                val viewHolder = recyclerView.findViewHolderForAdapterPosition(randomPosition) as AdapterMusic.Holder
+                                openAudioPlayer(randomPosition, viewHolder.itemView.findViewById(R.id.adapter_music_art))
+                            }.onFailure {
+                                showError(it, goBack = false)
+                            }
+                        }
                     }
                     R.drawable.ic_play -> {
                         for (position in audioModels.indices) {
                             if (MusicPreferences.getLastMusicId() == audioModels[position].id) {
                                 (recyclerView.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(position, displayHeight / 2)
+
+                                postDelayed(500) {
+                                    runCatching {
+                                        val viewHolder = recyclerView.findViewHolderForAdapterPosition(position) as AdapterMusic.Holder
+                                        openAudioPlayer(MusicPreferences.getMusicPosition(), viewHolder.itemView.findViewById(R.id.adapter_music_art))
+                                    }.onFailure {
+                                        showError(it, goBack = false)
+                                    }
+                                }
+
                                 break
                             }
                         }
                     }
                     R.drawable.ic_search -> {
-                        openFragmentSlide(MusicSearch.newInstance(), "search_music")
+                        openFragmentSlide(MusicSearch.newInstance(), MusicSearch.TAG)
                     }
                 }
             }
@@ -210,13 +259,18 @@ class Music : KeyboardScopedFragment() {
         })
     }
 
+    private fun openAudioPlayer(position: Int, view: View) {
+        requireArguments().putInt(BundleConstants.position, position)
+        openFragmentArc(AudioPlayer.newInstance(position), view, AudioPlayer.TAG)
+    }
+
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            MusicPreferences.lastMusicId -> {
+            MusicPreferences.LAST_MUSIC_ID -> {
                 adapterMusic?.updateHighlightedSongState()
             }
-            MusicPreferences.musicSort,
-            MusicPreferences.musicSortReverse -> {
+            MusicPreferences.MUSIC_SORT,
+            MusicPreferences.MUSIC_SORT_REVERSE -> {
                 MusicPreferences.setMusicPosition(-1)
                 musicViewModel.sortSongs()
             }
@@ -230,5 +284,7 @@ class Music : KeyboardScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "Music"
     }
 }

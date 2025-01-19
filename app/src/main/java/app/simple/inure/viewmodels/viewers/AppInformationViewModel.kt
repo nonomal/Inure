@@ -6,7 +6,6 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager.NameNotFoundException
 import android.os.Build
 import android.text.Spannable
-import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
@@ -25,20 +24,23 @@ import app.simple.inure.apk.utils.PackageUtils.getApplicationLastUpdateTime
 import app.simple.inure.apk.utils.PackageUtils.getPackageArchiveInfo
 import app.simple.inure.apk.utils.PackageUtils.getPackageInfo
 import app.simple.inure.apk.utils.PackageUtils.getPackageSize
+import app.simple.inure.apk.utils.PackageUtils.getXposedDescription
+import app.simple.inure.apk.utils.PackageUtils.isBackupAllowed
 import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
+import app.simple.inure.apk.utils.PackageUtils.isXposedModule
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.exceptions.DexClassesNotFoundException
 import app.simple.inure.extensions.viewmodels.WrappedViewModel
 import app.simple.inure.preferences.FormattingPreferences
 import app.simple.inure.util.FileSizeHelper.toSize
 import app.simple.inure.util.FileUtils.toFile
-import app.simple.inure.util.SDKHelper
+import app.simple.inure.util.SDKUtils
 import app.simple.inure.util.StringUtils.applyAccentColor
 import app.simple.inure.util.StringUtils.applySecondaryTextColor
 import app.simple.inure.util.StringUtils.endsWithAny
-import app.simple.inure.util.TrackerUtils.getTrackerSignatures
+import app.simple.inure.util.TrackerUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import net.dongliu.apk.parser.bean.ApkMeta
 import net.lingala.zip4j.ZipFile
 import java.io.File
 import java.text.NumberFormat
@@ -61,8 +63,8 @@ class AppInformationViewModel(application: Application, private var packageInfo:
 
     private fun loadInformation() {
         kotlin.runCatching {
-            if (packageInfo.applicationInfo.sourceDir.endsWithAny(".zip", ".xapk", ".apks", ".apkm")) {
-                val zipFile = ZipFile(packageInfo.applicationInfo.sourceDir)
+            if (packageInfo.safeApplicationInfo.sourceDir.endsWithAny(".zip", ".xapk", ".apks", ".apkm")) {
+                val zipFile = ZipFile(packageInfo.safeApplicationInfo.sourceDir)
                 val file = applicationContext().getInstallerDir("temp")
 
                 file.deleteRecursively()
@@ -72,14 +74,14 @@ class AppInformationViewModel(application: Application, private var packageInfo:
                 for (apkFile in file.listFiles()!!) {
                     if (apkFile.absolutePath.endsWith(".apk", ignoreCase = true)) {
                         packageInfo = packageManager.getPackageArchiveInfo(apkFile.absolutePath)!!
-                        packageInfo.applicationInfo.sourceDir = apkFile.absolutePath
-                        packageInfo.applicationInfo.publicSourceDir = apkFile.absolutePath
+                        packageInfo.safeApplicationInfo.sourceDir = apkFile.absolutePath
+                        packageInfo.safeApplicationInfo.publicSourceDir = apkFile.absolutePath
                         packageInfo.splitNames = zipFile.fileHeaders.map { it.fileName }.toTypedArray()
                         break
                     }
                 }
 
-                packageInfo.applicationInfo.sourceDir = file.absolutePath
+                packageInfo.safeApplicationInfo.sourceDir = file.absolutePath
                 packageInfo.splitNames = zipFile.fileHeaders.map { it.fileName }.toTypedArray()
 
                 isPackageInstalled = packageManager.isPackageInstalled(packageInfo.packageName)
@@ -105,36 +107,45 @@ class AppInformationViewModel(application: Application, private var packageInfo:
             return@getOrElse
         }
 
+        val informationList = arrayListOf<Pair<Int, Spannable>>()
+
         kotlin.runCatching {
-            Log.d("TAG", "loadInformation: ${packageInfo.applicationInfo.sourceDir}")
-            information.postValue(arrayListOf(
-                    getPackageName(),
-                    getVersion(),
-                    getVersionCode(),
-                    getInstallLocation(),
-                    getState(),
-                    getDataDir(),
-                    getCacheSize(),
-                    getApkPath(),
-                    getSplitNames(),
-                    getTrackers(),
-                    getGlesVersion(),
-                    getArchitecture(),
-                    getNativeLibraries(),
-                    getNativeLibsDir(),
-                    getUID(),
-                    getInstallDate(),
-                    getUpdateDate(),
-                    getMinSDK(),
-                    getTargetSDK(),
-                    getFOSS(),
-                    getMethodCount(),
-                    getApex(),
-                    getApplicationType(),
-                    getInstaller(),
-                    getRequestedPermissions(),
-                    getFeatures(),
-            ))
+            informationList.add(getPackageName())
+            informationList.add(getVersion())
+            informationList.add(getVersionCode())
+            informationList.add(getInstallLocation())
+            informationList.add(getState())
+            informationList.add(getDataDir())
+            informationList.add(getCacheSize())
+            informationList.add(getApkPath())
+            informationList.add(getSplitNames())
+            informationList.add(getBackup())
+            informationList.add(getTrackers())
+            informationList.add(getGlesVersion())
+            informationList.add(getArchitecture())
+            informationList.add(getNativeLibraries())
+            informationList.add(getNativeLibsDir())
+            informationList.add(getUID())
+            informationList.add(getInstallDate())
+            informationList.add(getUpdateDate())
+            informationList.add(getMinSDK())
+            informationList.add(getTargetSDK())
+            informationList.add(getFOSS())
+            if (FOSSParser.isPackageFOSS(packageInfo)) {
+                informationList.add(getFOSSLicense())
+            }
+            informationList.add(getXposedModule())
+            if (packageInfo.safeApplicationInfo.isXposedModule()) {
+                informationList.add(getXposedDescription())
+            }
+            informationList.add(getMethodCount())
+            informationList.add(getApex())
+            informationList.add(getApplicationType())
+            informationList.add(getInstaller())
+            informationList.add(getRequestedPermissions())
+            informationList.add(getFeatures())
+
+            information.postValue(informationList)
         }.onFailure {
             it.printStackTrace()
             postWarning(it.toString())
@@ -149,7 +160,7 @@ class AppInformationViewModel(application: Application, private var packageInfo:
     private fun getApkPath(): Pair<Int, Spannable> {
         val apkPath = kotlin.runCatching {
             if (isPackageInstalled) {
-                packageInfo.applicationInfo.sourceDir + " | " + packageInfo.applicationInfo.sourceDir.toSize()
+                packageInfo.safeApplicationInfo.sourceDir + " | " + packageInfo.safeApplicationInfo.sourceDir.toSize()
             } else {
                 null
             }
@@ -166,7 +177,7 @@ class AppInformationViewModel(application: Application, private var packageInfo:
             buildString {
                 append(getString(R.string.installed))
                 append(" | ")
-                if (packageInfo.applicationInfo.enabled) {
+                if (packageInfo.safeApplicationInfo.enabled) {
                     append(getString(R.string.enabled))
                 } else {
                     append(getString(R.string.disabled))
@@ -183,8 +194,8 @@ class AppInformationViewModel(application: Application, private var packageInfo:
 
     private fun getDataDir(): Pair<Int, Spannable> {
         kotlin.runCatching {
-            // val s = packageInfo.applicationInfo.dataDir + " | " + packageInfo.applicationInfo.dataDir.getDirectorySize()
-            return Pair(R.string.data, packageInfo.applicationInfo.dataDir.applySecondaryTextColor())
+            // val s = packageInfo.safeApplicationInfo.dataDir + " | " + packageInfo.safeApplicationInfo.dataDir.getDirectorySize()
+            return Pair(R.string.data, packageInfo.safeApplicationInfo.dataDir.applySecondaryTextColor())
         }.getOrElse {
             return Pair(R.string.data, getString(R.string.not_available).applySecondaryTextColor())
         }
@@ -192,7 +203,7 @@ class AppInformationViewModel(application: Application, private var packageInfo:
 
     private fun getCacheSize(): Pair<Int, Spannable> {
         kotlin.runCatching {
-            val packageSizes = packageInfo.getPackageSize(application)
+            val packageSizes = packageInfo.getPackageSize(applicationContext())
             packageSizes.cacheSize.let {
                 val s = it.toSize()
                 return Pair(R.string.cache, s.applySecondaryTextColor())
@@ -219,7 +230,7 @@ class AppInformationViewModel(application: Application, private var packageInfo:
                 PackageInfo.INSTALL_LOCATION_INTERNAL_ONLY -> getString(R.string.internal)
                 PackageInfo.INSTALL_LOCATION_PREFER_EXTERNAL -> getString(R.string.prefer_external)
                 else -> {
-                    if (packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
+                    if (packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
                         getString(R.string.system)
                     } else {
                         getString(R.string.not_available)
@@ -240,7 +251,7 @@ class AppInformationViewModel(application: Application, private var packageInfo:
 
     private fun getGlesVersion(): Pair<Int, Spannable> {
         val glesVersion = kotlin.runCatching {
-            File(packageInfo.applicationInfo.sourceDir)
+            File(packageInfo.safeApplicationInfo.sourceDir)
                 .getGlEsVersion().ifEmpty { getString(R.string.not_available) }
         }.getOrElse {
             getString(R.string.not_available)
@@ -252,19 +263,19 @@ class AppInformationViewModel(application: Application, private var packageInfo:
 
     private fun getArchitecture(): Pair<Int, Spannable> {
         return Pair(R.string.architecture,
-                    packageInfo.applicationInfo.sourceDir.toFile()
+                    packageInfo.safeApplicationInfo.sourceDir.toFile()
                         .getApkArchitecture(context).toString().applyAccentColor())
     }
 
     private fun getNativeLibraries(): Pair<Int, Spannable> {
         return Pair(R.string.native_libraries,
-                    packageInfo.applicationInfo.sourceDir.toFile()
+                    packageInfo.safeApplicationInfo.sourceDir.toFile()
                         .getNativeLibraries(context).toString().applySecondaryTextColor())
     }
 
     private fun getNativeLibsDir(): Pair<Int, Spannable> {
         val nativeLibsDir = kotlin.runCatching {
-            packageInfo.applicationInfo.nativeLibraryDir
+            packageInfo.safeApplicationInfo.nativeLibraryDir
         }.getOrElse {
             null
         }
@@ -276,7 +287,7 @@ class AppInformationViewModel(application: Application, private var packageInfo:
 
     private fun getUID(): Pair<Int, Spannable> {
         return Pair(R.string.uid,
-                    packageInfo.applicationInfo.uid.toString().applySecondaryTextColor())
+                    packageInfo.safeApplicationInfo.uid.toString().applySecondaryTextColor())
     }
 
     private fun getInstallDate(): Pair<Int, Spannable> {
@@ -292,16 +303,10 @@ class AppInformationViewModel(application: Application, private var packageInfo:
     private fun getMinSDK(): Pair<Int, Spannable> {
         val minSdk = kotlin.runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                "${packageInfo.applicationInfo.minSdkVersion}, ${SDKHelper.getSdkTitle(packageInfo.applicationInfo.minSdkVersion)}"
+                "${packageInfo.safeApplicationInfo.minSdkVersion}, ${SDKUtils.getSdkTitle(packageInfo.safeApplicationInfo.minSdkVersion)}"
             } else {
-                when (val apkMeta: Any = packageInfo.applicationInfo.getApkMeta()) {
-                    is ApkMeta -> {
-                        "${apkMeta.minSdkVersion}, ${SDKHelper.getSdkTitle(apkMeta.minSdkVersion)}"
-                    }
-
-                    else -> {
-                        getString(R.string.not_available)
-                    }
+                with(packageInfo.safeApplicationInfo.getApkMeta()) {
+                    "${minSdkVersion}, ${SDKUtils.getSdkTitle(minSdkVersion)}"
                 }
             }
         }.getOrElse {
@@ -314,8 +319,8 @@ class AppInformationViewModel(application: Application, private var packageInfo:
 
     private fun getTargetSDK(): Pair<Int, Spannable> {
         val targetSdk = kotlin.runCatching {
-            "${packageInfo.applicationInfo.targetSdkVersion}, " +
-                    SDKHelper.getSdkTitle(packageInfo.applicationInfo.targetSdkVersion)
+            "${packageInfo.safeApplicationInfo.targetSdkVersion}, " +
+                    SDKUtils.getSdkTitle(packageInfo.safeApplicationInfo.targetSdkVersion)
         }.getOrElse {
             it.message!!
         }
@@ -325,27 +330,51 @@ class AppInformationViewModel(application: Application, private var packageInfo:
     }
 
     private fun getFOSS(): Pair<Int, Spannable> {
-        FOSSParser.init(application)
-        val isFOSS = FOSSParser.isPackageFOSS(packageInfo.packageName)
+        FOSSParser.init(applicationContext())
+        val isFOSS = FOSSParser.isPackageFOSS(packageInfo)
         return Pair(R.string.foss,
                     (if (isFOSS) getString(R.string.yes) else getString(R.string.no))
                         .applySecondaryTextColor())
+    }
+
+    private fun getFOSSLicense(): Pair<Int, Spannable> {
+        FOSSParser.init(applicationContext())
+        val licenses = FOSSParser.getPackageLicense(packageInfo)
+        return Pair(R.string.open_source_licenses,
+                    licenses.toString().applySecondaryTextColor())
+    }
+
+    private fun getXposedModule(): Pair<Int, Spannable> {
+        val string = buildString {
+            if (packageInfo.safeApplicationInfo.isXposedModule()) {
+                append(getString(R.string.yes))
+            } else {
+                append(getString(R.string.no))
+            }
+        }
+
+        return Pair(R.string.xposed_module, string.applySecondaryTextColor())
+    }
+
+    private fun getXposedDescription(): Pair<Int, Spannable> {
+        return Pair(R.string.description,
+                    packageInfo.safeApplicationInfo.getXposedDescription().applySecondaryTextColor())
     }
 
     private fun getMethodCount(): Pair<Int, Spannable> {
         var count = 0
         val method = kotlin.runCatching {
             val dexClasses = try {
-                packageInfo.applicationInfo.sourceDir.toFile().getDexData()
+                packageInfo.safeApplicationInfo.sourceDir.toFile().getDexData()
             } catch (e: DexClassesNotFoundException) {
-                packageInfo.applicationInfo.publicSourceDir.toFile().getDexData()
+                packageInfo.safeApplicationInfo.publicSourceDir.toFile().getDexData()
             }
 
             for (clazz in dexClasses) {
                 count += clazz.javaClass.methods.size
             }
 
-            val dexClassesCount = java.util.zip.ZipFile(packageInfo.applicationInfo.sourceDir).use {
+            val dexClassesCount = java.util.zip.ZipFile(packageInfo.safeApplicationInfo.sourceDir).use {
                 var dexCount = 0
 
                 with(it.entries()) {
@@ -384,7 +413,7 @@ class AppInformationViewModel(application: Application, private var packageInfo:
     }
 
     private fun getApplicationType(): Pair<Int, Spannable> {
-        val applicationType = if (packageInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
+        val applicationType = if (packageInfo.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
             getString(R.string.system)
         } else {
             getString(R.string.user)
@@ -398,9 +427,9 @@ class AppInformationViewModel(application: Application, private var packageInfo:
         @Suppress("deprecation")
         val name = kotlin.runCatching {
             val p0 = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                application.packageManager.getInstallSourceInfo(packageInfo.packageName).installingPackageName
+                packageManager.getInstallSourceInfo(packageInfo.packageName).installingPackageName
             } else {
-                application.packageManager.getInstallerPackageName(packageInfo.packageName)
+                packageManager.getInstallerPackageName(packageInfo.packageName)
             }
 
             PackageUtils.getApplicationName(context, p0!!)
@@ -420,9 +449,9 @@ class AppInformationViewModel(application: Application, private var packageInfo:
         val permissions = StringBuilder()
 
         try {
-            packageInfo.requestedPermissions.sort()
+            packageInfo.requestedPermissions!!.sort()
 
-            for (permission in packageInfo.requestedPermissions) {
+            for (permission in packageInfo.requestedPermissions!!) {
                 if (permissions.isEmpty()) {
                     permissions.append(permission)
                 } else {
@@ -465,49 +494,65 @@ class AppInformationViewModel(application: Application, private var packageInfo:
                     names.toString().applySecondaryTextColor())
     }
 
+    private fun getBackup(): Pair<Int, Spannable> {
+        val isBackupAllowed = packageInfo.isBackupAllowed()
+        val spannable = if (isBackupAllowed) {
+            getString(R.string.allowed)
+        } else {
+            getString(R.string.not_allowed)
+        }
+        return Pair(R.string.backup, spannable.applySecondaryTextColor())
+    }
+
     private fun getTrackers(): Pair<Int, Spannable> {
-        val trackers = applicationContext().getTrackerSignatures()
+        val trackers = TrackerUtils.getTrackersData()
         var count = 0
         val list: MutableList<String> = mutableListOf()
 
         if (packageInfo.activities != null) {
-            for (activity in packageInfo.activities) {
+            for (activity in packageInfo.activities!!) {
                 for (tracker in trackers) {
-                    if (activity.name.lowercase().contains(tracker.lowercase())) {
-                        count++
-                        list.add(activity.name)
-                        break
+                    tracker.codeSignature.split("|").forEach {
+                        if (activity.name.lowercase().contains(it.lowercase())) {
+                            count++
+                            list.add(tracker.name)
+                            return@forEach
+                        }
                     }
                 }
             }
         }
 
         if (packageInfo.services != null) {
-            for (service in packageInfo.services) {
+            for (service in packageInfo.services!!) {
                 for (tracker in trackers) {
-                    if (service.name.lowercase().contains(tracker.lowercase())) {
-                        count++
-                        list.add(service.name)
-                        break
+                    tracker.codeSignature.split("|").forEach {
+                        if (service.name.lowercase().contains(it.lowercase())) {
+                            count++
+                            list.add(tracker.name)
+                            return@forEach
+                        }
                     }
                 }
             }
         }
 
         if (packageInfo.receivers != null) {
-            for (receiver in packageInfo.receivers) {
+            for (receiver in packageInfo.receivers!!) {
                 for (tracker in trackers) {
-                    if (receiver.name.lowercase().contains(tracker.lowercase())) {
-                        count++
-                        list.add(receiver.name)
-                        break
+                    tracker.codeSignature.split("|").forEach {
+                        if (receiver.name.lowercase().contains(it.lowercase())) {
+                            count++
+                            list.add(tracker.name)
+                            return@forEach
+                        }
                     }
                 }
             }
         }
 
         buildString {
-            for (tracker in list) {
+            for (tracker in list.distinct()) {
                 if (this.isEmpty()) {
                     append(getString(R.string.trackers_count, count))
                     append("\n\n")
@@ -531,7 +576,7 @@ class AppInformationViewModel(application: Application, private var packageInfo:
         val features = StringBuilder()
 
         try {
-            for (feature in packageInfo.reqFeatures) {
+            for (feature in packageInfo.reqFeatures!!) {
                 if (features.isEmpty()) {
                     if (feature.name.isNullOrEmpty()) {
                         features.append(MetaUtils.getOpenGL(feature.reqGlEsVersion))

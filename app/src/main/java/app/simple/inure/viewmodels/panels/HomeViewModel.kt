@@ -11,6 +11,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.R
 import app.simple.inure.apk.parsers.FOSSParser
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.PackageUtilsViewModel
 import app.simple.inure.models.PackageStats
 import app.simple.inure.models.VisibilityCustomizationModel
@@ -19,6 +20,7 @@ import app.simple.inure.preferences.DevelopmentPreferences
 import app.simple.inure.preferences.HomePreferences
 import app.simple.inure.preferences.SharedPreferences.registerSharedPreferenceChangeListener
 import app.simple.inure.preferences.SharedPreferences.unregisterSharedPreferenceChangeListener
+import app.simple.inure.util.AppUtils
 import app.simple.inure.util.ConditionUtils.invert
 import app.simple.inure.util.UsageInterval
 import kotlinx.coroutines.Dispatchers
@@ -113,6 +115,30 @@ class HomeViewModel(application: Application) :
         return customizableMenuItems
     }
 
+    fun shouldShowRecentlyInstalledLoader(): Boolean {
+        return recentlyInstalledAppData.value.isNullOrEmpty()
+    }
+
+    fun shouldShowRecentlyUpdatedLoader(): Boolean {
+        return recentlyUpdatedAppData.value.isNullOrEmpty()
+    }
+
+    fun shouldShowMostUsedLoader(): Boolean {
+        return mostUsedAppData.value.isNullOrEmpty()
+    }
+
+    fun shouldShowUninstalledLoader(): Boolean {
+        return uninstalled.value.isNullOrEmpty()
+    }
+
+    fun shouldShowDisabledLoader(): Boolean {
+        return disabled.value.isNullOrEmpty()
+    }
+
+    fun shouldShowFOSSLoader(): Boolean {
+        return foss.value.isNullOrEmpty()
+    }
+
     private fun loadRecentlyInstalledAppData() {
         viewModelScope.launch(Dispatchers.IO) {
             val apps = getInstalledApps().stream()
@@ -146,38 +172,43 @@ class HomeViewModel(application: Application) :
 
     private fun loadMostUsed() {
         viewModelScope.launch(Dispatchers.IO) {
-            val stats = with(UsageInterval.getTimeInterval()) {
-                (application.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager)
-                    .queryAndAggregateUsageStats(startTime, endTime)
-            }
-
-            val apps = getInstalledApps().stream()
-                .filter { stats.containsKey(it.packageName) }
-                .collect(Collectors.toList()) as ArrayList<PackageInfo>
-
-            var list = arrayListOf<PackageStats>()
-
-            for (app in apps) {
-                kotlin.runCatching {
-                    val packageStats = PackageStats()
-
-                    packageStats.packageInfo = app
-
-                    packageStats.totalTimeUsed += stats[app.packageName]?.totalTimeInForeground ?: 0
-
-                    list.add(packageStats)
-                }.getOrElse {
-                    // The app or data proly got deleted
-                    // Move to next app
+            try {
+                val stats = with(UsageInterval.getTimeInterval()) {
+                    (applicationContext().getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager)
+                        .queryAndAggregateUsageStats(startTime, endTime)
                 }
+
+                val apps = getInstalledApps().stream()
+                    .filter { stats.containsKey(it.packageName) }
+                    .collect(Collectors.toList()) as ArrayList<PackageInfo>
+
+                var list = arrayListOf<PackageStats>()
+
+                for (app in apps) {
+                    kotlin.runCatching {
+                        val packageStats = PackageStats()
+
+                        packageStats.packageInfo = app
+
+                        packageStats.totalTimeUsed += stats[app.packageName]?.totalTimeInForeground ?: 0
+
+                        list.add(packageStats)
+                    }.getOrElse {
+                        // The app or data proly got deleted
+                        // Move to next app
+                    }
+                }
+
+                list = list
+                    .filter { it.totalTimeUsed > 0L }
+                    .sortedByDescending { it.totalTimeUsed }
+                    .toCollection(ArrayList())
+
+                mostUsedAppData.postValue(list)
+            } catch (e: SecurityException) {
+                // Usage stats permission not granted
+                mostUsedAppData.postValue(arrayListOf())
             }
-
-            list = list
-                .filter { it.totalTimeUsed > 0L }
-                .sortedByDescending { it.totalTimeUsed }
-                .toCollection(ArrayList())
-
-            mostUsedAppData.postValue(list)
         }
     }
 
@@ -185,7 +216,7 @@ class HomeViewModel(application: Application) :
         viewModelScope.launch(Dispatchers.IO) {
 
             uninstalledApps.sortBy {
-                it.applicationInfo.name
+                it.safeApplicationInfo.name
             }
 
             uninstalled.postValue(uninstalledApps)
@@ -195,27 +226,27 @@ class HomeViewModel(application: Application) :
     private fun loadDisabledApps() {
         viewModelScope.launch(Dispatchers.IO) {
             val apps = getInstalledApps().stream()
-                .filter { it.applicationInfo.enabled.invert() }
+                .filter { it.safeApplicationInfo.enabled.invert() }
                 .collect(Collectors.toList()) as ArrayList<PackageInfo>
 
             apps.sortBy {
-                it.applicationInfo.name
+                it.applicationInfo?.name
             }
 
             disabled.postValue(apps)
         }
     }
 
-    private fun loadFossApps() {
+    private fun loadFOSSApps() {
         viewModelScope.launch(Dispatchers.IO) {
-            FOSSParser.init(application.applicationContext)
+            FOSSParser.init(applicationContext())
 
             val apps = getInstalledApps().stream()
-                .filter { FOSSParser.isPackageFOSS(it.packageName) }
+                .filter { FOSSParser.isPackageFOSS(it) }
                 .collect(Collectors.toList()) as ArrayList<PackageInfo>
 
             apps.sortBy {
-                it.applicationInfo.name
+                it.safeApplicationInfo.name
             }
 
             foss.postValue(apps)
@@ -225,11 +256,11 @@ class HomeViewModel(application: Application) :
     private fun loadHiddenApps() {
         viewModelScope.launch(Dispatchers.IO) {
             val apps = getInstalledApps().stream()
-                .filter { it.applicationInfo.flags and PRIVATE_FLAG_HIDDEN == 0 }
+                .filter { it.safeApplicationInfo.flags and PRIVATE_FLAG_HIDDEN == 0 }
                 .collect(Collectors.toList()) as ArrayList<PackageInfo>
 
             apps.sortBy {
-                it.applicationInfo.name
+                it.safeApplicationInfo.name
             }
 
             hidden.postValue(apps)
@@ -245,11 +276,11 @@ class HomeViewModel(application: Application) :
 
             list.add(Pair(R.drawable.ic_app_icon, R.string.apps))
 
-            if (HomePreferences.isPanelVisible(HomePreferences.isTerminalVisible)) {
+            if (HomePreferences.isPanelVisible(HomePreferences.IS_TERMINAL_VISIBLE)) {
                 list.add(Pair(R.drawable.ic_terminal, R.string.terminal))
             }
 
-            if (HomePreferences.isPanelVisible(HomePreferences.isUsageStatisticsVisible)) {
+            if (HomePreferences.isPanelVisible(HomePreferences.IS_USAGE_STATISTICS_VISIBLE)) {
                 list.add(Pair(R.drawable.ic_stats, R.string.usage_statistics))
             }
 
@@ -257,70 +288,82 @@ class HomeViewModel(application: Application) :
 
             list.add(Pair(R.drawable.ic_layers, R.string.batch))
 
-            if (HomePreferences.isPanelVisible(HomePreferences.isAnalyticsVisible)) {
+            if (HomePreferences.isPanelVisible(HomePreferences.IS_ANALYTICS_VISIBLE)) {
                 list.add(Pair(R.drawable.ic_analytics, R.string.analytics))
             }
 
             list.add(Pair(R.drawable.ic_notes, R.string.notes))
             list.add(Pair(R.drawable.ic_tags, R.string.tags))
 
-            if (DevelopmentPreferences.get(DevelopmentPreferences.enableDeviceInfo)) {
+            if (DevelopmentPreferences.get(DevelopmentPreferences.ENABLE_DEVICE_INFO)) {
                 list.add(Pair(R.drawable.ic_memory, R.string.device_info))
             }
 
-            if (HomePreferences.isPanelVisible(HomePreferences.isSavedCommandsVisible)) {
-                list.add(Pair(R.drawable.ic_push_pin, R.string.saved_commands))
+            if (HomePreferences.isPanelVisible(HomePreferences.IS_SAVED_COMMANDS_VISIBLE)) {
+                list.add(Pair(R.drawable.ic_push_pin, R.string.terminal_commands))
             }
 
             list.add(Pair(0, 0)) // Divider
             list.add(Pair(R.drawable.ic_apps_category_recently_installed, R.string.recently_installed))
             list.add(Pair(R.drawable.ic_apps_category_recently_updated, R.string.recently_updated))
 
-            if (HomePreferences.isPanelVisible(HomePreferences.isMostUsedVisible)) {
+            if (HomePreferences.isPanelVisible(HomePreferences.IS_MOST_USED_VISIBLE)) {
                 list.add(Pair(R.drawable.ic_apps_category_most_used, R.string.most_used))
             }
 
-            if (HomePreferences.isPanelVisible(HomePreferences.isUninstalledVisible)) {
+            if (HomePreferences.isPanelVisible(HomePreferences.IS_UNINSTALLED_VISIBLE)) {
                 list.add(Pair(R.drawable.ic_apps_category_deleted_apps, R.string.uninstalled))
             }
 
-            if (HomePreferences.isPanelVisible(HomePreferences.isDisabledVisible)) {
+            if (HomePreferences.isPanelVisible(HomePreferences.IS_DISABLED_VISIBLE)) {
                 list.add(Pair(R.drawable.ic_disable, R.string.disabled))
             }
 
-            list.add(Pair(R.drawable.ic_open_source, R.string.foss)) // Divider
+            list.add(Pair(R.drawable.ic_open_source, R.string.foss))
 
-            if (DevelopmentPreferences.get(DevelopmentPreferences.enableHiddenApps)) {
+            if (DevelopmentPreferences.get(DevelopmentPreferences.ENABLE_HIDDEN_APPS)) {
                 list.add(Pair(R.drawable.ic_visibility_off, R.string.hidden))
             }
 
             list.add(Pair(0, 0)) // Divider
 
             if (ConfigurationPreferences.isUsingRoot() || ConfigurationPreferences.isUsingShizuku()) {
-                if (HomePreferences.isPanelVisible(HomePreferences.isBatteryOptimizationVisible)) {
+                if (HomePreferences.isPanelVisible(HomePreferences.IS_BATTERY_OPTIMIZATION_VISIBLE)) {
                     list.add(Pair(R.drawable.ic_settings_power, R.string.battery_optimization))
                 }
             }
 
             if (ConfigurationPreferences.isUsingRoot()) {
-                if (HomePreferences.isPanelVisible(HomePreferences.isBootManagerVisible)) {
+                if (HomePreferences.isPanelVisible(HomePreferences.IS_BOOT_MANAGER_VISIBLE)) {
                     list.add(Pair(R.drawable.ic_power_off, R.string.boot_manager))
                 }
             }
 
-            if (HomePreferences.isPanelVisible(HomePreferences.isAPKsVisible)) {
+            if (HomePreferences.isPanelVisible(HomePreferences.IS_APKS_VISIBLE)) {
                 list.add(Pair(R.drawable.ic_adb, R.string.APKs))
             }
 
-            if (DevelopmentPreferences.get(DevelopmentPreferences.music)) {
+            if (AppUtils.isGithubFlavor() || AppUtils.isBetaFlavor()) {
+                if (ConfigurationPreferences.isUsingRoot() || ConfigurationPreferences.isUsingShizuku()) {
+                    list.add(Pair(R.drawable.ic_recycling, R.string.debloat))
+                }
+            }
+
+            list.add(Pair(0, 0)) // Divider
+
+            if (DevelopmentPreferences.get(DevelopmentPreferences.MUSIC)) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     list.add(Pair(R.drawable.ic_music_note, R.string.music))
                 }
             }
 
-            if (HomePreferences.isPanelVisible(HomePreferences.isStackTracesVisible)
-                && DevelopmentPreferences.get(DevelopmentPreferences.crashHandler).invert()) {
+            if (HomePreferences.isPanelVisible(HomePreferences.IS_STACKTRACES_VISIBLE)
+                    && DevelopmentPreferences.get(DevelopmentPreferences.CRASH_HANDLER).invert()) {
                 list.add(Pair(R.drawable.ic_stacktrace, R.string.crash_report))
+            }
+
+            if (HomePreferences.isPanelVisible(HomePreferences.IS_PREFERENCES_VISIBLE)) {
+                list.add(Pair(R.drawable.ic_settings, R.string.preferences))
             }
 
             // Add a last divider
@@ -334,17 +377,18 @@ class HomeViewModel(application: Application) :
         viewModelScope.launch(Dispatchers.IO) {
             val list = arrayListOf<VisibilityCustomizationModel>()
 
-            list.add(VisibilityCustomizationModel(R.string.terminal, R.drawable.ic_terminal, HomePreferences.isTerminalVisible))
-            list.add(VisibilityCustomizationModel(R.string.usage_statistics, R.drawable.ic_stats, HomePreferences.isUsageStatisticsVisible))
-            list.add(VisibilityCustomizationModel(R.string.analytics, R.drawable.ic_analytics, HomePreferences.isAnalyticsVisible))
-            list.add(VisibilityCustomizationModel(R.string.most_used, R.drawable.ic_apps_category_most_used, HomePreferences.isMostUsedVisible))
-            list.add(VisibilityCustomizationModel(R.string.uninstalled, R.drawable.ic_apps_category_deleted_apps, HomePreferences.isUninstalledVisible))
-            list.add(VisibilityCustomizationModel(R.string.disabled, R.drawable.ic_disable, HomePreferences.isDisabledVisible))
-            list.add(VisibilityCustomizationModel(R.string.crash_report, R.drawable.ic_stacktrace, HomePreferences.isStackTracesVisible))
-            list.add(VisibilityCustomizationModel(R.string.saved_commands, R.drawable.ic_push_pin, HomePreferences.isSavedCommandsVisible))
-            list.add(VisibilityCustomizationModel(R.string.battery_optimization, R.drawable.ic_settings_power, HomePreferences.isBatteryOptimizationVisible))
-            list.add(VisibilityCustomizationModel(R.string.boot_manager, R.drawable.ic_power_off, HomePreferences.isBootManagerVisible))
-            list.add(VisibilityCustomizationModel(R.string.APKs, R.drawable.ic_adb, HomePreferences.isAPKsVisible))
+            list.add(VisibilityCustomizationModel(R.string.terminal, R.drawable.ic_terminal, HomePreferences.IS_TERMINAL_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.usage_statistics, R.drawable.ic_stats, HomePreferences.IS_USAGE_STATISTICS_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.analytics, R.drawable.ic_analytics, HomePreferences.IS_ANALYTICS_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.most_used, R.drawable.ic_apps_category_most_used, HomePreferences.IS_MOST_USED_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.uninstalled, R.drawable.ic_apps_category_deleted_apps, HomePreferences.IS_UNINSTALLED_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.disabled, R.drawable.ic_disable, HomePreferences.IS_DISABLED_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.crash_report, R.drawable.ic_stacktrace, HomePreferences.IS_STACKTRACES_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.terminal_commands, R.drawable.ic_push_pin, HomePreferences.IS_SAVED_COMMANDS_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.battery_optimization, R.drawable.ic_settings_power, HomePreferences.IS_BATTERY_OPTIMIZATION_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.boot_manager, R.drawable.ic_power_off, HomePreferences.IS_BOOT_MANAGER_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.APKs, R.drawable.ic_adb, HomePreferences.IS_APKS_VISIBLE))
+            list.add(VisibilityCustomizationModel(R.string.preferences, R.drawable.ic_settings, HomePreferences.IS_PREFERENCES_VISIBLE))
 
             customizableMenuItems.postValue(list)
         }
@@ -360,7 +404,7 @@ class HomeViewModel(application: Application) :
         loadRecentlyUpdatedAppData()
         loadDisabledApps()
         loadHiddenApps()
-        loadFossApps()
+        loadFOSSApps()
     }
 
     override fun onUninstalledAppsLoaded(uninstalledApps: ArrayList<PackageInfo>) {
@@ -375,23 +419,29 @@ class HomeViewModel(application: Application) :
         loadItems()
     }
 
+    fun refreshFOSSApps() {
+        loadFOSSApps()
+    }
+
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            DevelopmentPreferences.music,
-            DevelopmentPreferences.enableDeviceInfo,
-            ConfigurationPreferences.isUsingRoot,
-            ConfigurationPreferences.isUsingShizuku,
-            DevelopmentPreferences.enableHiddenApps,
-            HomePreferences.isTerminalVisible,
-            HomePreferences.isUsageStatisticsVisible,
-            HomePreferences.isAnalyticsVisible,
-            HomePreferences.isMostUsedVisible,
-            HomePreferences.isUninstalledVisible,
-            HomePreferences.isDisabledVisible,
-            HomePreferences.isStackTracesVisible,
-            HomePreferences.isSavedCommandsVisible,
-            HomePreferences.isBatteryOptimizationVisible,
-            HomePreferences.isBootManagerVisible
+            DevelopmentPreferences.MUSIC,
+            DevelopmentPreferences.ENABLE_DEVICE_INFO,
+            ConfigurationPreferences.IS_USING_ROOT,
+            ConfigurationPreferences.IS_USING_SHIZUKU,
+            DevelopmentPreferences.ENABLE_HIDDEN_APPS,
+            HomePreferences.IS_TERMINAL_VISIBLE,
+            HomePreferences.IS_USAGE_STATISTICS_VISIBLE,
+            HomePreferences.IS_ANALYTICS_VISIBLE,
+            HomePreferences.IS_MOST_USED_VISIBLE,
+            HomePreferences.IS_UNINSTALLED_VISIBLE,
+            HomePreferences.IS_DISABLED_VISIBLE,
+            HomePreferences.IS_STACKTRACES_VISIBLE,
+            HomePreferences.IS_SAVED_COMMANDS_VISIBLE,
+            HomePreferences.IS_BATTERY_OPTIMIZATION_VISIBLE,
+            HomePreferences.IS_BOOT_MANAGER_VISIBLE,
+            HomePreferences.IS_APKS_VISIBLE,
+            HomePreferences.IS_PREFERENCES_VISIBLE
             -> {
                 loadItems()
             }

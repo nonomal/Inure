@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.Misc
 import app.simple.inure.models.BatchPackageInfo
 import app.simple.inure.preferences.AppearancePreferences
@@ -105,7 +106,7 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
             stringBuilder.append("\n\t<app>\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.NAME))
-                stringBuilder.append("\t\t<name>${app.applicationInfo.name}</name>\n")
+                stringBuilder.append("\t\t<name>${app.safeApplicationInfo.name}</name>\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PACKAGE_NAME))
                 stringBuilder.append("\t\t<package_name>${app.packageName}</package_name>\n")
@@ -121,11 +122,11 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.MINIMUM_SDK))
-                    stringBuilder.append("\t\t<minimum_sdk>${app.applicationInfo.minSdkVersion}</minimum_sdk>\n")
+                    stringBuilder.append("\t\t<minimum_sdk>${app.safeApplicationInfo.minSdkVersion}</minimum_sdk>\n")
             }
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.TARGET_SDK))
-                stringBuilder.append("\t\t<target_sdk>${app.applicationInfo.targetSdkVersion}</target_sdk>\n")
+                stringBuilder.append("\t\t<target_sdk>${app.safeApplicationInfo.targetSdkVersion}</target_sdk>\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.SIZE)) {
                 stringBuilder.append("\t\t<size>${app.getSize()}</size>\n")
@@ -139,12 +140,6 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID))
                 stringBuilder.append("\t\t<izzyondroid_link>https://apt.izzysoft.de/fdroid/index/apk/${app.packageName}</izzyondroid_link>\n")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE))
-                stringBuilder.append("\t\t<amazon_store_link>https://www.amazon.com/gp/mas/dl/android?p=${app.packageName}</amazon_store_link>\n")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE))
-                stringBuilder.append("\t\t<galaxy_store_link>https://galaxystore.samsung.com/detail/${app.packageName}</galaxy_store_link>\n")
 
             stringBuilder.append("\t<app>\n")
         }
@@ -163,10 +158,10 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
         for (i in apps.indices) {
             stringBuilder.append("\n\n")
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.NAME))
-                stringBuilder.append("Name: ${apps[i].applicationInfo.name}\n")
+                stringBuilder.append("Name: ${apps[i].safeApplicationInfo.name}\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PACKAGE_NAME))
-                stringBuilder.append(apps[i].applicationInfo.packageName + "\n")
+                stringBuilder.append(apps[i].safeApplicationInfo.packageName + "\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.VERSION))
                 stringBuilder.append(apps[i].versionName + "\n")
@@ -179,11 +174,11 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.MINIMUM_SDK))
-                    stringBuilder.append(apps[i].applicationInfo.minSdkVersion.toString() + "\n")
+                    stringBuilder.append(apps[i].safeApplicationInfo.minSdkVersion.toString() + "\n")
             }
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.TARGET_SDK))
-                stringBuilder.append(apps[i].applicationInfo.targetSdkVersion.toString() + "\n")
+                stringBuilder.append(apps[i].safeApplicationInfo.targetSdkVersion.toString() + "\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.SIZE)) {
                 stringBuilder.append("${apps[i].getSize()}\n")
@@ -197,12 +192,6 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID))
                 stringBuilder.append("https://apt.izzysoft.de/fdroid/index/apk/${apps[i].packageName}\n")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE))
-                stringBuilder.append("https://www.amazon.com/gp/mas/dl/android?p=${apps[i].packageName}\n")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE))
-                stringBuilder.append("https://galaxystore.samsung.com/detail/${apps[i].packageName}\n")
         }
 
         stringBuilder.append("\n")
@@ -223,7 +212,7 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
             stringBuilder.append("\n\t\t{")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.NAME)) {
-                stringBuilder.append("\n\t\t\t\"name\": \"${app.applicationInfo.name}\",")
+                stringBuilder.append("\n\t\t\t\"name\": \"${app.safeApplicationInfo.name}\",")
             }
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PACKAGE_NAME)) {
@@ -240,11 +229,11 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.MINIMUM_SDK))
-                        stringBuilder.append("\n\t\t\t\"minimum_sdk\": \"${app.applicationInfo.minSdkVersion}\",")
+                        stringBuilder.append("\n\t\t\t\"minimum_sdk\": \"${app.safeApplicationInfo.minSdkVersion}\",")
                 }
 
                 if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.TARGET_SDK))
-                    stringBuilder.append("\n\t\t\t\"target_sdk\": \"${app.applicationInfo.targetSdkVersion}\",")
+                    stringBuilder.append("\n\t\t\t\"target_sdk\": \"${app.safeApplicationInfo.targetSdkVersion}\",")
 
                 if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.SIZE)) {
                     stringBuilder.append("\n\t\t\t\"size\": \"${app.getSize()}\",")
@@ -254,25 +243,22 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
                     stringBuilder.append("\n\t\t\t\"play_store_link\": \"https://play.google.com/store/apps/details?id=${app.packageName}\",")
 
                 if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.FDROID))
-                    stringBuilder.append("\n\t\t\t\"fdroid_link\": \"https://f-droid.org/en/packages/${app.packageName}\"")
+                    stringBuilder.append("\n\t\t\t\"fdroid_link\": \"https://f-droid.org/en/packages/${app.packageName}\",")
 
                 if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID))
-                    stringBuilder.append("\n\t\t\t\"izzyondroid_link\": \"https://apt.izzysoft.de/fdroid/index/apk/${app.packageName}\"")
-
-                if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE))
-                    stringBuilder.append("\n\t\t\t\"amazon_store_link\": \"https://www.amazon.com/gp/mas/dl/android?p=${app.packageName}\"")
-
-                if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE))
-                    stringBuilder.append("\n\t\t\t\"galaxy_store_link\": \"https://galaxystore.samsung.com/detail/${app.packageName}\"")
+                    stringBuilder.append("\n\t\t\t\"izzyondroid_link\": \"https://apt.izzysoft.de/fdroid/index/apk/${app.packageName}\",")
 
                 stringBuilder.append("\n\t\t},")
             }
-
-            stringBuilder.append("\n\t]")
-            stringBuilder.append("\n}")
-
-            stringBuilder.append("\n")
         }
+
+        // Remove the last comma to avoid a trailing comma error in JSON
+        if (apps.isNotEmpty()) {
+            stringBuilder.setLength(stringBuilder.length - 1)
+        }
+
+        stringBuilder.append("\n\t]")
+        stringBuilder.append("\n}")
 
         return stringBuilder
     }
@@ -316,17 +302,11 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
         if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID))
             stringBuilder.append("\"IzzyOnDroid Link,\"")
 
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE))
-            stringBuilder.append("\"Amazon Store Link,\"")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE))
-            stringBuilder.append("\"Galaxy Store Link,\"")
-
         stringBuilder.append("\n")
 
         for (app in apps) {
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.NAME))
-                stringBuilder.append("\"${app.applicationInfo.name}\",")
+                stringBuilder.append("\"${app.safeApplicationInfo.name}\",")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PACKAGE_NAME))
                 stringBuilder.append("\"${app.packageName}\",")
@@ -342,11 +322,11 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.MINIMUM_SDK))
-                    stringBuilder.append("\"${app.applicationInfo.minSdkVersion}\",")
+                    stringBuilder.append("\"${app.safeApplicationInfo.minSdkVersion}\",")
             }
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.TARGET_SDK))
-                stringBuilder.append("\"${app.applicationInfo.targetSdkVersion}\",")
+                stringBuilder.append("\"${app.safeApplicationInfo.targetSdkVersion}\",")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.SIZE))
                 stringBuilder.append("\"${app.getSize()}\",")
@@ -359,12 +339,6 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID))
                 stringBuilder.append("\"https://apt.izzysoft.de/fdroid/index/apk/${app.packageName}\",")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE))
-                stringBuilder.append("\"https://www.amazon.com/gp/mas/dl/android?p=${app.packageName}\",")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE))
-                stringBuilder.append("\"https://galaxystore.samsung.com/detail/${app.packageName}\",")
 
             stringBuilder.append("\n")
         }
@@ -468,12 +442,6 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
         if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID))
             stringBuilder.append("\t\t\t<th>IzzyOnDroid Link</th>\r\n")
 
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE))
-            stringBuilder.append("\t\t\t<th>Amazon Store Link</th>\r\n")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE))
-            stringBuilder.append("\t\t\t<th>Galaxy Store Link</th>\r\n")
-
         stringBuilder.append("\t\t</tr>\r\n")
 
         for (app in apps) {
@@ -483,7 +451,7 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
             stringBuilder.append("\t\t\t<td>${apps.indexOf(app) + 1}</td>\r\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.NAME))
-                stringBuilder.append("\t\t\t<td>${app.applicationInfo.name}</td>\r\n")
+                stringBuilder.append("\t\t\t<td>${app.safeApplicationInfo.name}</td>\r\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PACKAGE_NAME))
                 stringBuilder.append("\t\t\t<td>${app.packageName}</td>\r\n")
@@ -499,11 +467,11 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.MINIMUM_SDK))
-                    stringBuilder.append("\t\t\t<td>${app.applicationInfo.minSdkVersion}</td>\r\n")
+                    stringBuilder.append("\t\t\t<td>${app.safeApplicationInfo.minSdkVersion}</td>\r\n")
             }
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.TARGET_SDK))
-                stringBuilder.append("\t\t\t<td>${app.applicationInfo.targetSdkVersion}</td>\r\n")
+                stringBuilder.append("\t\t\t<td>${app.safeApplicationInfo.targetSdkVersion}</td>\r\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.SIZE))
                 stringBuilder.append("\t\t\t<td>${app.getSize()}</td>\r\n")
@@ -516,12 +484,6 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID))
                 stringBuilder.append("\t\t\t<td><a href=\"https://apt.izzysoft.de/fdroid/index/apk/${app.packageName}\">IzzyOnDroid</a></td>\r\n")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE))
-                stringBuilder.append("\t\t\t<td><a href=\"https://www.amazon.com/gp/mas/dl/android?p=${app.packageName}\">Amazon Store</a></td>\r\n")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE))
-                stringBuilder.append("\t\t\t<td><a href=\"https://galaxystore.samsung.com/detail/${app.packageName}\">Galaxy Store</a></td>\r\n")
 
             stringBuilder.append("\t\t</tr>\r\n")
         }
@@ -538,154 +500,46 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
     private fun generateMD(): StringBuilder {
         val stringBuilder = StringBuilder()
 
-        stringBuilder.append("### Generated by Inure App Manager\r\n")
-        stringBuilder.append("#### ${System.currentTimeMillis().toDate()}\r\n")
+        stringBuilder.append("# Generated by Inure App Manager\n") // Changed to first-level heading
+        stringBuilder.append("### ${System.currentTimeMillis().toDate()}\n")
 
-        stringBuilder.append("|")
-
-        // Add serial number
-        stringBuilder.append(" S. No. |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.NAME))
-            stringBuilder.append(" Name |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PACKAGE_NAME))
-            stringBuilder.append(" Package Name |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.VERSION))
-            stringBuilder.append(" Version Name |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.INSTALL_DATE))
-            stringBuilder.append(" First Install Time |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.UPDATE_DATE))
-            stringBuilder.append(" Last Update Time |")
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.MINIMUM_SDK))
-                stringBuilder.append(" Minimum SDK |")
-        }
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.TARGET_SDK))
-            stringBuilder.append(" Target SDK |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.SIZE))
-            stringBuilder.append(" Size |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PLAY_STORE))
-            stringBuilder.append(" Play Store Link |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.FDROID))
-            stringBuilder.append(" F-Droid Link |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID))
-            stringBuilder.append(" IzzyOnDroid Link |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE))
-            stringBuilder.append(" Amazon Store Link |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE))
-            stringBuilder.append(" Galaxy Store Link |")
-
-        stringBuilder.append("\r\n")
-
-        stringBuilder.append("|")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.NAME))
-            stringBuilder.append(" --- |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PACKAGE_NAME))
-            stringBuilder.append(" --- |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.VERSION))
-            stringBuilder.append(" --- |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.INSTALL_DATE))
-            stringBuilder.append(" --- |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.UPDATE_DATE))
-            stringBuilder.append(" --- |")
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.MINIMUM_SDK))
-                stringBuilder.append(" --- |")
-        }
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.TARGET_SDK))
-            stringBuilder.append(" --- |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.SIZE))
-            stringBuilder.append(" --- |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PLAY_STORE))
-            stringBuilder.append(" --- |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.FDROID))
-            stringBuilder.append(" --- |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID))
-            stringBuilder.append(" --- |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE))
-            stringBuilder.append(" --- |")
-
-        if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE))
-            stringBuilder.append(" --- |")
-
-        stringBuilder.append("\r\n")
-
-        for (app in apps) {
-            stringBuilder.append("|")
-
-            // Add serial number
-            stringBuilder.append(" ${apps.indexOf(app) + 1} |")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.NAME))
-                stringBuilder.append(" ${app.applicationInfo.name} |")
+        for (app in apps.indices) {
+            stringBuilder.append("\n\n## ${app + 1}. ${apps[app].safeApplicationInfo.name}\n") // Added serial number
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PACKAGE_NAME))
-                stringBuilder.append(" ${app.packageName} |")
+                stringBuilder.append("- **Package Name:** ${apps[app].packageName}\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.VERSION))
-                stringBuilder.append(" ${app.versionName} |")
+                stringBuilder.append("- **Version Name:** ${apps[app].versionName}\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.INSTALL_DATE))
-                stringBuilder.append(" ${app.firstInstallTime.toDate()} |")
+                stringBuilder.append("- **First Install Time:** ${apps[app].firstInstallTime.toDate()}\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.UPDATE_DATE))
-                stringBuilder.append(" ${app.lastUpdateTime.toDate()} |")
+                stringBuilder.append("- **Last Update Time:** ${apps[app].lastUpdateTime.toDate()}\n")
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.MINIMUM_SDK))
-                    stringBuilder.append(" ${app.applicationInfo.minSdkVersion} |")
+                    stringBuilder.append("- **Minimum SDK:** ${apps[app].safeApplicationInfo.minSdkVersion}\n")
             }
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.TARGET_SDK))
-                stringBuilder.append(" ${app.applicationInfo.targetSdkVersion} |")
+                stringBuilder.append("- **Target SDK:** ${apps[app].safeApplicationInfo.targetSdkVersion}\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.SIZE))
-                stringBuilder.append(" ${app.getSize()} |")
+                stringBuilder.append("- **Size:** ${apps[app].getSize()}\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.PLAY_STORE))
-                stringBuilder.append(" [Play Store](https://play.google.com/store/apps/details?id=${app.packageName}) |")
+                stringBuilder.append("- **[Play Store](https://play.google.com/store/apps/details?id=${apps[app].packageName})**\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.FDROID))
-                stringBuilder.append(" [F-Droid](https://f-droid.org/en/packages/${app.packageName}) |")
+                stringBuilder.append("- **[F-Droid](https://f-droid.org/en/packages/${apps[app].packageName})**\n")
 
             if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.IZZYONDROID))
-                stringBuilder.append(" [IzzyOnDroid](https://apt.izzysoft.de/fdroid/index/apk/${app.packageName}) |")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.AMAZON_STORE))
-                stringBuilder.append(" [Amazon Store](https://www.amazon.com/gp/mas/dl/android?p=${app.packageName}) |")
-
-            if (FlagUtils.isFlagSet(flags, GeneratedDataPreferences.GALAXY_STORE))
-                stringBuilder.append(" [Galaxy Store](https://galaxy.store/${app.packageName}) |")
-
-            stringBuilder.append("\r\n")
+                stringBuilder.append("- **[IzzyOnDroid](https://apt.izzysoft.de/fdroid/index/apk/${apps[app].packageName})**\n")
         }
 
-        stringBuilder.append("\r\n")
-        stringBuilder.append("</br>\r\n")
+        stringBuilder.append("\n")
 
         return stringBuilder
     }
@@ -695,8 +549,8 @@ open class DataGeneratorViewModel(application: Application) : PackageUtilsViewMo
     }
 
     private fun PackageInfo.getSize(): String {
-        val appSize = applicationInfo.sourceDir.toFile().length()
-        val splitSourceDirs = applicationInfo.splitSourceDirs?.getDirectorySize() ?: 0L
+        val appSize = safeApplicationInfo.sourceDir.toFile().length()
+        val splitSourceDirs = safeApplicationInfo.splitSourceDirs?.getDirectorySize() ?: 0L
 
         return (appSize + splitSourceDirs).toSize()
     }

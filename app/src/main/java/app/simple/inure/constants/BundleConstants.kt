@@ -1,6 +1,11 @@
 package app.simple.inure.constants
 
 object BundleConstants {
+    const val mode = "mode"
+    const val LRC_PATH = "lrc_path"
+    const val trackerInfo = "tracker_info"
+    const val packages = "packages"
+    const val scrollPosition = "scroll_position"
     const val tag = "tag"
     const val skip = "skip"
     const val state = "state"

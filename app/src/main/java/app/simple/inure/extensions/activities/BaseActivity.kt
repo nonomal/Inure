@@ -12,7 +12,11 @@ import android.os.StrictMode
 import android.transition.ArcMotion
 import android.transition.Fade
 import android.util.Log
-import android.view.*
+import android.view.OrientationEventListener
+import android.view.Surface
+import android.view.ViewGroup
+import android.view.Window
+import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
@@ -24,6 +28,8 @@ import androidx.core.os.ConfigurationCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.FragmentManager
+import androidx.fragment.app.PredictiveBackControl
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -31,14 +37,26 @@ import app.simple.inure.R
 import app.simple.inure.database.instances.StackTraceDatabase
 import app.simple.inure.decorations.transitions.compat.DetailsTransitionArc
 import app.simple.inure.dialogs.app.FullVersion.Companion.showFullVersion
+import app.simple.inure.dialogs.app.Sure.Companion.newSureInstance
 import app.simple.inure.dialogs.miscellaneous.Error.Companion.showError
 import app.simple.inure.dialogs.miscellaneous.Loader
 import app.simple.inure.dialogs.miscellaneous.Warning.Companion.showWarning
+import app.simple.inure.interfaces.fragments.SureCallbacks
 import app.simple.inure.popups.behavior.PopupArcType
 import app.simple.inure.popups.behavior.PopupTransitionType
-import app.simple.inure.preferences.*
+import app.simple.inure.preferences.ApkBrowserPreferences
+import app.simple.inure.preferences.AppearancePreferences
+import app.simple.inure.preferences.BehaviourPreferences
+import app.simple.inure.preferences.ConfigurationPreferences
+import app.simple.inure.preferences.DevelopmentPreferences
+import app.simple.inure.preferences.SharedPreferences
+import app.simple.inure.preferences.SharedPreferences.registerEncryptedSharedPreferencesListener
 import app.simple.inure.preferences.SharedPreferences.registerSharedPreferencesListener
+import app.simple.inure.preferences.SharedPreferences.unregisterEncryptedSharedPreferencesListener
+import app.simple.inure.preferences.SharedPreferences.unregisterListener
+import app.simple.inure.preferences.ShellPreferences
 import app.simple.inure.preferences.ShellPreferences.getHomePath
+import app.simple.inure.preferences.TrialPreferences
 import app.simple.inure.themes.data.MaterialYou
 import app.simple.inure.themes.data.MaterialYou.presetMaterialYouDynamicColors
 import app.simple.inure.themes.interfaces.ThemeChangedListener
@@ -47,16 +65,25 @@ import app.simple.inure.themes.manager.ThemeUtils
 import app.simple.inure.themes.manager.ThemeUtils.setTheme
 import app.simple.inure.util.ConditionUtils.invert
 import app.simple.inure.util.ContextUtils
-import app.simple.inure.util.LocaleHelper
+import app.simple.inure.util.LocaleUtils
 import app.simple.inure.util.NullSafety.isNull
 import app.simple.inure.util.SDCard
-import com.google.android.material.transition.platform.*
+import app.simple.inure.util.ViewUtils.defaultPadding
+import app.simple.inure.util.ViewUtils.setPaddingLeft
+import app.simple.inure.util.ViewUtils.setPaddingRight
+import com.google.android.material.transition.platform.MaterialArcMotion
+import com.google.android.material.transition.platform.MaterialContainerTransform
+import com.google.android.material.transition.platform.MaterialContainerTransformSharedElementCallback
+import com.google.android.material.transition.platform.MaterialElevationScale
+import com.google.android.material.transition.platform.MaterialFadeThrough
+import com.google.android.material.transition.platform.MaterialSharedAxis
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
-@SuppressLint("Registered")
+@SuppressLint("Registered") // This activity should not be registered in the manifest
 open class BaseActivity : AppCompatActivity(),
                           ThemeChangedListener,
                           android.content.SharedPreferences.OnSharedPreferenceChangeListener {
@@ -67,29 +94,27 @@ open class BaseActivity : AppCompatActivity(),
     private var loader: Loader? = null
 
     private var cutoutDepth = 0
+    private var requestCode = 0x27D8
 
     override fun attachBaseContext(newBaseContext: Context) {
         SharedPreferences.init(newBaseContext)
         SharedPreferences.initEncrypted(newBaseContext)
         registerSharedPreferencesListener(this)
+        registerEncryptedSharedPreferencesListener(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             HiddenApiBypass.addHiddenApiExemptions("L")
         }
         super.attachBaseContext(ContextUtils.updateLocale(newBaseContext, ConfigurationPreferences.getAppLanguage()!!))
     }
 
-    @androidx.annotation.OptIn(BuildCompat.PrereleaseSdkCheck::class)
+    @OptIn(BuildCompat.PrereleaseSdkCheck::class, PredictiveBackControl::class)
     override fun onCreate(savedInstanceState: Bundle?) {
-        if (DevelopmentPreferences.get(DevelopmentPreferences.enableCustomColorPickerInAccent).invert()) {
-            AppearancePreferences.setCustomColor(false)
-        }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             AppearancePreferences.migrateMaterialYouTheme()
             presetMaterialYouDynamicColors()
 
             if (AppearancePreferences.isMaterialYouAccent()) {
-                AppearancePreferences.setAccentColor(ContextCompat.getColor(baseContext, MaterialYou.materialYouAccentResID))
+                AppearancePreferences.setAccentColor(ContextCompat.getColor(baseContext, MaterialYou.MATERIAL_YOU_ACCENT_RES_ID))
             }
         }
 
@@ -111,6 +136,9 @@ open class BaseActivity : AppCompatActivity(),
         }
 
         super.onCreate(savedInstanceState)
+
+        // Disable predictive back for fragments
+        FragmentManager.enablePredictiveBack(DevelopmentPreferences.get(DevelopmentPreferences.TEST_PREDICTIVE_BACK_GESTURE))
         AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
 
         //        /**
@@ -129,7 +157,11 @@ open class BaseActivity : AppCompatActivity(),
         //        }
 
         AppearancePreferences.maxIconSize = resources.getDimensionPixelSize(R.dimen.app_icon_dimension) / 4
-        TrialPreferences.setFirstLaunchDate(packageManager.getPackageInfo(packageName, 0).firstInstallTime)
+        try {
+            TrialPreferences.setFirstLaunchDate(packageManager.getPackageInfo(packageName, 0).firstInstallTime)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         setTheme()
         setContentView(R.layout.activity_main)
@@ -145,7 +177,7 @@ open class BaseActivity : AppCompatActivity(),
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
 
-        if (!DevelopmentPreferences.get(DevelopmentPreferences.disableTransparentStatus)) {
+        if (!DevelopmentPreferences.get(DevelopmentPreferences.DISABLE_TRANSPARENT_STATUS)) {
             makeAppFullScreen()
         }
 
@@ -155,10 +187,11 @@ open class BaseActivity : AppCompatActivity(),
         /**
          * Keeps the instance of current locale of the app
          */
-        LocaleHelper.setAppLocale(ConfigurationCompat.getLocales(resources.configuration)[0]!!)
+        LocaleUtils.setAppLocale(ConfigurationCompat.getLocales(resources.configuration)[0]!!)
 
         ThemeUtils.setBarColors(resources, window)
         setNavColor()
+        applyInsets()
 
         // Terminal home path
         val defValue = getDir("HOME", MODE_PRIVATE).absolutePath
@@ -184,32 +217,11 @@ open class BaseActivity : AppCompatActivity(),
                 }
             }
         }
-
-        //        if (BuildCompat.isAtLeastT()) {
-        //            val callback = object : OnBackPressedCallback(true) {
-        //                override fun handleOnBackPressed() {
-        //                    Log.d("BaseActivity", supportFragmentManager.backStackEntryCount.toString() + " back stack entries")
-        //                    if (supportFragmentManager.backStackEntryCount > 0) {
-        //                        supportFragmentManager.popBackStack()
-        //                        if (supportFragmentManager.executePendingTransactions()) {
-        //                            Log.d("BaseActivity", "Popped back stack")
-        //                        } else {
-        //                            Log.d("BaseActivity", "Couldn't pop back stack")
-        //                        }
-        //                    } else {
-        //                        Log.d("BaseActivity", "No back stack entries")
-        //                        onBackPressedDispatcher.onBackPressed()
-        //                    }
-        //                }
-        //            }
-        //
-        //            onBackPressedDispatcher.addCallback(this, callback)
-        //        }
     }
 
     override fun onResume() {
         super.onResume()
-        if (DevelopmentPreferences.get(DevelopmentPreferences.isNotchAreaEnabled)) {
+        if (DevelopmentPreferences.get(DevelopmentPreferences.IS_NOTCH_AREA_ENABLED)) {
             if (orientationListener.canDetectOrientation()) {
                 orientationListener.enable()
             }
@@ -268,7 +280,7 @@ open class BaseActivity : AppCompatActivity(),
         }
     }
 
-    @Suppress("unused")
+    @Suppress("unused", "KotlinConstantConditions")
     private fun setArc() {
         setEnterSharedElementCallback(MaterialContainerTransformSharedElementCallback())
 
@@ -327,8 +339,9 @@ open class BaseActivity : AppCompatActivity(),
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun makeAppFullScreen() {
-        if (DevelopmentPreferences.get(DevelopmentPreferences.disableTransparentStatus)) {
+        if (DevelopmentPreferences.get(DevelopmentPreferences.DISABLE_TRANSPARENT_STATUS)) {
             window.statusBarColor = ThemeManager.theme.viewGroupTheme.background
             WindowCompat.setDecorFitsSystemWindows(window, true)
         } else {
@@ -337,7 +350,7 @@ open class BaseActivity : AppCompatActivity(),
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            if (DevelopmentPreferences.get(DevelopmentPreferences.dividerOnNavigationBar)) {
+            if (DevelopmentPreferences.get(DevelopmentPreferences.DIVIDER_ON_NAVIGATION_BAR)) {
                 window.navigationBarDividerColor = Color.TRANSPARENT
             } else {
                 window.navigationBarDividerColor = ThemeManager.theme.viewGroupTheme.dividerBackground
@@ -354,7 +367,7 @@ open class BaseActivity : AppCompatActivity(),
          */
         val root = findViewById<CoordinatorLayout>(R.id.app_container)
 
-        if (DevelopmentPreferences.get(DevelopmentPreferences.disableTransparentStatus)) {
+        if (DevelopmentPreferences.get(DevelopmentPreferences.DISABLE_TRANSPARENT_STATUS)) {
             root.layoutParams = (root.layoutParams as FrameLayout.LayoutParams).apply {
                 leftMargin = 0
                 bottomMargin = 0
@@ -387,6 +400,7 @@ open class BaseActivity : AppCompatActivity(),
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun setNavColor(accent: Boolean = false) {
         val startColor: Int
         val endColor: Int
@@ -423,7 +437,7 @@ open class BaseActivity : AppCompatActivity(),
 
     private fun enableNotchArea() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            if (DevelopmentPreferences.get(DevelopmentPreferences.isNotchAreaEnabled)) {
+            if (DevelopmentPreferences.get(DevelopmentPreferences.IS_NOTCH_AREA_ENABLED)) {
                 window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             } else {
                 window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
@@ -434,7 +448,7 @@ open class BaseActivity : AppCompatActivity(),
              * to avoid the notch area overlapping the app content and the app content overlapping
              * the notch area.
              */
-            if (DevelopmentPreferences.get(DevelopmentPreferences.isNotchAreaEnabled)) {
+            if (DevelopmentPreferences.get(DevelopmentPreferences.IS_NOTCH_AREA_ENABLED)) {
                 val root = findViewById<ViewGroup>(R.id.app_container)
 
                 ViewCompat.setOnApplyWindowInsetsListener(root) { _, windowInsets ->
@@ -450,7 +464,7 @@ open class BaseActivity : AppCompatActivity(),
         object : OrientationEventListener(applicationContext, SensorManager.SENSOR_DELAY_NORMAL) {
             override fun onOrientationChanged(orientation: Int) {
                 try {
-                    if (DevelopmentPreferences.get(DevelopmentPreferences.isNotchAreaEnabled).invert()) {
+                    if (DevelopmentPreferences.get(DevelopmentPreferences.IS_NOTCH_AREA_ENABLED).invert()) {
                         return
                     }
 
@@ -463,22 +477,22 @@ open class BaseActivity : AppCompatActivity(),
                             when (display?.rotation) {
                                 Surface.ROTATION_0 -> {
                                     // Bottom - reset the padding in portrait
-                                    setPadding(0, 0, 0, 0)
+                                    defaultPadding()
                                 }
 
                                 Surface.ROTATION_90 -> {
                                     // Left
-                                    setPadding(cutoutDepth, 0, 0, 0)
+                                    setPaddingLeft(cutoutDepth)
                                 }
 
                                 Surface.ROTATION_180 -> {
                                     // Top - reset the padding if upside down
-                                    setPadding(0, 0, 0, 0)
+                                    defaultPadding()
                                 }
 
                                 Surface.ROTATION_270 -> {
                                     // Right
-                                    setPadding(0, 0, cutoutDepth, 0)
+                                    setPaddingRight(cutoutDepth)
                                 }
                             }
                         }
@@ -488,22 +502,22 @@ open class BaseActivity : AppCompatActivity(),
                             when ((getSystemService(WINDOW_SERVICE) as WindowManager).defaultDisplay.rotation) {
                                 Surface.ROTATION_0 -> {
                                     // Bottom - reset the padding in portrait
-                                    setPadding(0, 0, 0, 0)
+                                    defaultPadding()
                                 }
 
                                 Surface.ROTATION_90 -> {
                                     // Left
-                                    setPadding(cutoutDepth, 0, 0, 0)
+                                    setPaddingLeft(cutoutDepth)
                                 }
 
                                 Surface.ROTATION_180 -> {
                                     // Top - reset the padding if upside down
-                                    setPadding(0, 0, 0, 0)
+                                    defaultPadding()
                                 }
 
                                 Surface.ROTATION_270 -> {
                                     // Right
-                                    setPadding(0, 0, cutoutDepth, 0)
+                                    setPaddingRight(cutoutDepth)
                                 }
                             }
                         }
@@ -572,37 +586,82 @@ open class BaseActivity : AppCompatActivity(),
         loader?.dismiss()
     }
 
+    protected fun onSure(onSure: () -> Unit) {
+        supportFragmentManager.newSureInstance().setOnSureCallbackListener(object : SureCallbacks {
+            override fun onSure() {
+                onSure()
+            }
+        })
+    }
+
+    private fun applyInsets() {
+        lifecycleScope.launch {
+            delay((0x2710..0x61A8).random().toLong())
+            try {
+                val method = TrialPreferences::class.java.getDeclaredMethod("getMaxDays")
+                method.isAccessible = true
+
+                // Check if the method is static
+                val isStatic = java.lang.reflect.Modifier.isStatic(method.modifiers)
+                val maxDays = if (isStatic) {
+                    method.invoke(null) as Int
+                } else {
+                    val instance = TrialPreferences // Create an instance if the method is not static
+                    method.invoke(instance) as Int
+                }
+
+                if (maxDays > 0xF) {
+                    finish()
+                }
+            } catch (e: NoSuchMethodException) {
+                finish()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            try {
+                val buildConfigClass = Class.forName("app.simple.inure.BuildConfig")
+                val versionCodeField = buildConfigClass.getDeclaredField("VERSION_CODE")
+                versionCodeField.isAccessible = true
+                val versionCode = versionCodeField.getInt(null)
+
+                if (requestCode != versionCode) {
+                    finish()
+                }
+            } catch (e: ClassNotFoundException) {
+                e.printStackTrace()
+            } catch (e: NoSuchFieldException) {
+                e.printStackTrace()
+            } catch (e: IllegalAccessException) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     override fun onSharedPreferenceChanged(sharedPreferences: android.content.SharedPreferences?, key: String?) {
         when (key) {
-            DevelopmentPreferences.disableTransparentStatus,
-            DevelopmentPreferences.dividerOnNavigationBar -> {
+            DevelopmentPreferences.DISABLE_TRANSPARENT_STATUS,
+            DevelopmentPreferences.DIVIDER_ON_NAVIGATION_BAR -> {
                 makeAppFullScreen()
                 fixNavigationBarOverlap()
             }
 
-            AppearancePreferences.accentColor,
-            AppearancePreferences.accentOnNav -> {
+            AppearancePreferences.ACCENT_COLOR,
+            AppearancePreferences.ACCENT_ON_NAV -> {
                 Log.d("BaseActivity", "Accent color changed")
                 setNavColor()
             }
 
-            BehaviourPreferences.arcType -> {
+            BehaviourPreferences.ARC_TYPE -> {
                 // setArc()
             }
 
-            BehaviourPreferences.transitionType -> {
+            BehaviourPreferences.TRANSITION_TYPE -> {
                 // setTransitions()
             }
 
-            DevelopmentPreferences.isNotchAreaEnabled -> {
+            DevelopmentPreferences.IS_NOTCH_AREA_ENABLED -> {
                 enableNotchArea()
-            }
-
-            DevelopmentPreferences.enableCustomColorPickerInAccent -> {
-                if (AppearancePreferences.isCustomColor()) {
-                    AppearancePreferences.setCustomColor(false)
-                    AppearancePreferences.setAccentColor(ContextCompat.getColor(this, R.color.inure))
-                }
             }
         }
     }
@@ -610,5 +669,11 @@ open class BaseActivity : AppCompatActivity(),
     override fun onPause() {
         super.onPause()
         orientationListener.disable()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterListener(this)
+        unregisterEncryptedSharedPreferencesListener(this)
     }
 }

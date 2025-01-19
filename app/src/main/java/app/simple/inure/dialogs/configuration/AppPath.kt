@@ -9,9 +9,9 @@ import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.FragmentManager
 import app.simple.inure.R
 import app.simple.inure.apk.utils.PackageData
-import app.simple.inure.decorations.checkbox.InureCheckBox
 import app.simple.inure.decorations.corners.DynamicCornerEditText
 import app.simple.inure.decorations.ripple.DynamicRippleTextView
+import app.simple.inure.decorations.toggles.CheckBox
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.extensions.fragments.ScopedDialogFragment
 import app.simple.inure.preferences.ConfigurationPreferences
@@ -23,7 +23,7 @@ class AppPath : ScopedDialogFragment() {
 
     private lateinit var editText: DynamicCornerEditText
     private lateinit var pathInfo: TypeFaceTextView
-    private lateinit var sdcardCheckbox: InureCheckBox
+    private lateinit var sdcardCheckbox: CheckBox
     private lateinit var save: DynamicRippleTextView
     private lateinit var close: DynamicRippleTextView
     private lateinit var reset: DynamicRippleTextView
@@ -50,7 +50,7 @@ class AppPath : ScopedDialogFragment() {
 
         pathInfo.text = PackageData.getPackageDir(requireContext(), ConfigurationPreferences.getAppPath())?.absolutePath
         editText.setText(ConfigurationPreferences.getAppPath())
-        sdcardCheckbox.setChecked(ConfigurationPreferences.isExternalStorage())
+        sdcardCheckbox.isChecked = ConfigurationPreferences.isExternalStorage()
 
         editText.doOnTextChanged { text, _, _, _ ->
             pathInfo.text = PackageData.getPackageDir(requireContext(), text.toString())?.absolutePath
@@ -82,7 +82,7 @@ class AppPath : ScopedDialogFragment() {
                 if (SDCard.findSdCardPath(requireContext()) != null) {
                     ConfigurationPreferences.setExternalStorage(true)
                 } else {
-                    sdcardCheckbox.setChecked(false)
+                    sdcardCheckbox.isChecked = false
                     showWarning("No SD Card found", dismiss = false)
                 }
             } else {
@@ -103,7 +103,7 @@ class AppPath : ScopedDialogFragment() {
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         super.onSharedPreferenceChanged(sharedPreferences, key)
         when (key) {
-            ConfigurationPreferences.isExternalStorage -> {
+            ConfigurationPreferences.IS_EXTERNAL_STORAGE -> {
                 kotlin.runCatching {
                     pathInfo.text = PackageData.getPackageDir(requireContext(), editText.text.toString())?.absolutePath
                 }.onFailure {
@@ -124,8 +124,10 @@ class AppPath : ScopedDialogFragment() {
 
         fun FragmentManager.showAppPathDialog(): AppPath {
             val fragment = newInstance()
-            fragment.show(this, "app_path")
+            fragment.show(this, TAG)
             return fragment
         }
+
+        const val TAG = "app_path"
     }
 }

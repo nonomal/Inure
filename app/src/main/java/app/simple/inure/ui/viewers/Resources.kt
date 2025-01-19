@@ -9,7 +9,7 @@ import android.view.ViewGroup
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterResources
+import app.simple.inure.adapters.viewers.AdapterResources
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.extensions.fragments.SearchBarScopedFragment
@@ -45,21 +45,22 @@ class Resources : SearchBarScopedFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         componentsViewModel.getResources().observe(viewLifecycleOwner) {
-            val adapterResources = AdapterResources(it, searchBox.text.toString().trim())
+            setCount(it.size)
 
-            recyclerView.adapter = adapterResources
+            val adapterResources = AdapterResources(it, searchBox.text.toString().trim())
+            recyclerView.setExclusiveAdapter(adapterResources)
 
             adapterResources.setOnResourceClickListener(object : AdapterResources.ResourceCallbacks {
                 override fun onResourceClicked(path: String) {
-                    if (DevelopmentPreferences.get(DevelopmentPreferences.isWebViewXmlViewer)) {
-                        openFragmentSlide(XMLViewerWebView.newInstance(packageInfo, false, path), "wv_xml")
+                    if (DevelopmentPreferences.get(DevelopmentPreferences.IS_WEBVIEW_XML_VIEWER)) {
+                        openFragmentSlide(XMLWebView.newInstance(packageInfo, path), XMLWebView.TAG)
                     } else {
-                        openFragmentSlide(XMLViewerTextView.newInstance(packageInfo, false, path), "tv_xml")
+                        openFragmentSlide(XML.newInstance(packageInfo, false, path), XML.TAG)
                     }
                 }
 
                 override fun onResourceLongClicked(path: String, view: View, position: Int) {
-                    openFragmentSlide(Text.newInstance(packageInfo, path), "txt_tv_xml")
+                    openFragmentSlide(Text.newInstance(packageInfo, path), Text.TAG)
                 }
             })
         }
@@ -89,7 +90,7 @@ class Resources : SearchBarScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            ResourcesPreferences.resourcesSearch -> {
+            ResourcesPreferences.RESOURCES_SEARCH -> {
                 searchBoxState(animate = true, ResourcesPreferences.isSearchVisible())
             }
         }
@@ -104,5 +105,7 @@ class Resources : SearchBarScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "resources"
     }
 }

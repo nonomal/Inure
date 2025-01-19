@@ -5,8 +5,10 @@ import android.content.pm.PackageInfo
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import app.simple.inure.R
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.RootServiceViewModel
-import app.simple.inure.util.ConditionUtils.isNotNull
+import app.simple.inure.util.NullSafety.isNotNull
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.nio.FileSystemManager
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +21,7 @@ class SharedPreferencesViewModel(private val packageInfo: PackageInfo, applicati
         initRootProc()
     }
 
-    private val path = packageInfo.applicationInfo.dataDir + "/shared_prefs/"
+    private val path = packageInfo.safeApplicationInfo.dataDir + "/shared_prefs/"
 
     private val sharedPrefsFiles: MutableLiveData<ArrayList<String>> by lazy {
         MutableLiveData<ArrayList<String>>()
@@ -43,8 +45,25 @@ class SharedPreferencesViewModel(private val packageInfo: PackageInfo, applicati
                 kotlin.runCatching {
                     with(fileSystemManager.getFile(path)) {
                         kotlin.runCatching {
-                            val list = this.list()?.toList() as ArrayList<String>?
-                            sharedPrefsFiles.postValue(list!!)
+                            val list = this.list()
+
+                            if (list.isNullOrEmpty()) {
+                                postWarning(getString(R.string.no_preferences_found))
+                            } else {
+                                try {
+                                    sharedPrefsFiles.postValue(list.toList() as ArrayList<String>)
+                                } catch (e: ClassCastException) {
+                                    /**
+                                     *  If the directory only contains one file, the list will be a singleton list
+                                     *  and the cast will fail. This is a workaround for that.
+                                     */
+                                    val list1 = arrayListOf<String>()
+                                    list.forEach {
+                                        list1.add(it)
+                                    }
+                                    sharedPrefsFiles.postValue(list1)
+                                }
+                            }
                         }.getOrElse {
                             postError(it)
                             sharedPrefsFiles.postValue(arrayListOf())

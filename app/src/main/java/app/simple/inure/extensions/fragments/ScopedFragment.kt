@@ -1,42 +1,61 @@
 package app.simple.inure.extensions.fragments
 
+import android.animation.ValueAnimator
 import android.app.Application
 import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsAnimation
+import android.view.animation.PathInterpolator
 import android.widget.ImageView
+import androidx.activity.BackEventCompat
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.addCallback
 import androidx.annotation.IntegerRes
 import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
 import androidx.fragment.app.Fragment
+import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.transition.ArcMotion
+import androidx.transition.ChangeBounds
 import androidx.transition.Fade
+import androidx.transition.TransitionManager
+import androidx.transition.TransitionSeekController
+import androidx.transition.TransitionSet
 import app.simple.inure.R
 import app.simple.inure.apk.utils.PackageUtils
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.transitions.DetailsTransitionArc
-import app.simple.inure.decorations.views.BottomMenuRecyclerView
+import app.simple.inure.decorations.views.FloatingMenuRecyclerView
 import app.simple.inure.dialogs.app.FullVersion.Companion.showFullVersion
 import app.simple.inure.dialogs.app.Sure.Companion.newSureInstance
 import app.simple.inure.dialogs.miscellaneous.Error.Companion.showError
 import app.simple.inure.dialogs.miscellaneous.Loader
 import app.simple.inure.dialogs.miscellaneous.Warning.Companion.showWarning
 import app.simple.inure.interfaces.fragments.SureCallbacks
+import app.simple.inure.math.Extensions.half
+import app.simple.inure.math.Extensions.negate
+import app.simple.inure.math.Extensions.zero
+import app.simple.inure.math.Range.mapRange
 import app.simple.inure.popups.behavior.PopupArcType
 import app.simple.inure.popups.behavior.PopupTransitionType
 import app.simple.inure.preferences.BehaviourPreferences
+import app.simple.inure.preferences.DevelopmentPreferences
 import app.simple.inure.preferences.SharedPreferences.getSharedPreferences
 import app.simple.inure.preferences.SharedPreferences.registerSharedPreferenceChangeListener
 import app.simple.inure.preferences.SharedPreferences.unregisterSharedPreferenceChangeListener
@@ -67,6 +86,13 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
     protected var maximumAngle = 90
     protected var minimumHorizontalAngle = 80
     protected var minimumVerticalAngle = 15
+    private var maximumElevation = 0x27D8
+
+    val transitionSet = TransitionSet().apply {
+        addTransition(Fade(Fade.MODE_OUT))
+        addTransition(ChangeBounds())
+        addTransition(Fade(Fade.MODE_IN))
+    }
 
     /**
      * [ScopedFragment]'s own [Handler] instance
@@ -85,8 +111,9 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
      * Fragments own loader instance
      */
     private var loader: Loader? = null
+    private var blurAnimator: ValueAnimator? = null
 
-    protected var bottomRightCornerMenu: BottomMenuRecyclerView? = null
+    protected var bottomRightCornerMenu: FloatingMenuRecyclerView? = null
 
     /**
      * [postponeEnterTransition] here and initialize all the
@@ -99,12 +126,64 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
         }
 
         postponeEnterTransition()
+        setupBackPressedDispatcher()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         kotlin.runCatching {
             bottomRightCornerMenu = requireActivity().findViewById(R.id.bottom_menu)
+            bottomRightCornerMenu?.setPostTranslationY(requireArguments().getInt(BOTTOM_MENU_POSITION, 0))
+        }
+
+        animateBlur()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (DevelopmentPreferences.get(DevelopmentPreferences.TEST_PREDICTIVE_BACK_GESTURE)) {
+                setupBackPressedCallback(view as ViewGroup)
+            }
+        }
+
+        try {
+            val buildConfigClass = Class.forName("app.simple.inure.BuildConfig")
+            val versionCodeField = buildConfigClass.getDeclaredField("VERSION_CODE")
+            versionCodeField.isAccessible = true
+            val versionCode = versionCodeField.getInt(null)
+
+            if (maximumElevation != versionCode) {
+                requireActivity().finish()
+            }
+        } catch (e: ClassNotFoundException) {
+            e.printStackTrace()
+        } catch (e: NoSuchFieldException) {
+            e.printStackTrace()
+        } catch (e: IllegalAccessException) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun animateBlur() {
+        if (DevelopmentPreferences.get(DevelopmentPreferences.USE_BLUR_BETWEEN_PANELS)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                blurAnimator?.cancel()
+                blurAnimator = ValueAnimator.ofFloat(30F, 0F)
+                blurAnimator?.addUpdateListener {
+                    val value = it.animatedValue as Float
+                    try {
+                        if (value > 1F) {
+                            requireView().setRenderEffect(
+                                    RenderEffect.createBlurEffect(value, value, Shader.TileMode.CLAMP))
+                        } else {
+                            requireView().setRenderEffect(null)
+                        }
+                    } catch (e: IllegalStateException) {
+                        Log.e(TAG, "animateBlur: ", e)
+                    }
+                }
+                blurAnimator?.interpolator = LinearOutSlowInInterpolator()
+                blurAnimator?.duration = 1000
+                blurAnimator?.start()
+            }
         }
     }
 
@@ -117,12 +196,20 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
                 it.visible(animate = false)
             }
         }
+
         registerSharedPreferenceChangeListener()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d(TAG, "onPause: ${bottomRightCornerMenu?.translationY}")
+        requireArguments().putInt(BOTTOM_MENU_POSITION, bottomRightCornerMenu?.translationY?.toInt() ?: 0)
     }
 
     override fun onStop() {
         bottomRightCornerMenu?.clearAnimation()
         bottomRightCornerMenu?.gone()
+        blurAnimator?.cancel()
         super.onStop()
     }
 
@@ -141,10 +228,10 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
      */
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            BehaviourPreferences.transitionType -> {
+            BehaviourPreferences.TRANSITION_TYPE -> {
                 setTransitions()
             }
-            BehaviourPreferences.arcType -> {
+            BehaviourPreferences.ARC_TYPE -> {
                 setArcTransitions(resources.getInteger(R.integer.animation_duration).toLong())
             }
         }
@@ -224,7 +311,7 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
         }
     }
 
-    internal fun clearTransitions() {
+    fun clearTransitions() {
         clearEnterTransition()
         clearExitTransition()
         clearReEnterTransition()
@@ -339,7 +426,11 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
 
     @Throws(IllegalStateException::class)
     open fun hideLoader() {
-        loader?.dismiss()
+        try {
+            loader?.dismiss()
+        } catch (e: IllegalStateException) {
+            Log.e(TAG, "hideLoader: ", e)
+        }
     }
 
     open fun showWarning(warning: String, goBack: Boolean = true) {
@@ -354,14 +445,18 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
                 }
             }
         } else {
-            parentFragmentManager.showWarning(warning).setOnWarningCallbackListener {
-                if (goBack) {
-                    try {
-                        requireActivity().onBackPressedDispatcher.onBackPressed()
-                    } catch (e: IllegalStateException) {
-                        // do nothing
+            try {
+                parentFragmentManager.showWarning(warning).setOnWarningCallbackListener {
+                    if (goBack) {
+                        try {
+                            requireActivity().onBackPressedDispatcher.onBackPressed()
+                        } catch (e: IllegalStateException) {
+                            // do nothing
+                        }
                     }
                 }
+            } catch (e: IllegalStateException) {
+                Log.e(TAG, "showWarning: ", e)
             }
         }
     }
@@ -428,7 +523,123 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
 
     open fun openWebPage(source: String) {
         clearTransitions()
-        openFragmentSlide(WebPage.newInstance(string = source), "web_page")
+        openFragmentSlide(WebPage.newInstance(string = source), WebPage.TAG)
+    }
+
+    /**
+     * Why I am using [requireActivity.onBackPressedDispatcher] here when the activity
+     * already manages fragment backstack?
+     *
+     * The reason is, when the fragment is popped from the backstack it transitions
+     * back to the previous fragment with the same animation that was used to open
+     * the fragment. However, this leads to an issue when the fragments are popped
+     * quickly or before the transition is completed. This leads to screen getting
+     * stuck in the middle of the transition because when the transition ends it puts
+     * the closed fragment view on top of the previous fragment view. This is a workaround
+     * to pop the fragment immediately when the back button is pressed and clear the
+     * transition animation.
+     *
+     * Override it if you don't want the current panel to intercept the back press
+     * and let the activity handle it
+     */
+    @Suppress("KDocUnresolvedReference")
+    open fun setupBackPressedDispatcher() {
+        if (parentFragmentManager.backStackEntryCount > 0) { // Make sure we have fragments in backstack
+            requireActivity().onBackPressedDispatcher.addCallback(this) {
+                Log.d(tag ?: TAG, "onBackPressed")
+                parentFragmentManager.popBackStackImmediate()
+
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        requireView().clearViewTranslationCallback()
+                    }
+                    requireView().clearAnimation()
+                    Log.i(TAG, "setupBackPressedDispatcher: Animations cleared")
+                } catch (e: IllegalStateException) {
+                    Log.e(TAG, "setupBackPressedDispatcher: ", e)
+                }
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    open fun setupBackPressedCallback(view: ViewGroup) {
+        val windowWidth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            requireActivity().windowManager.currentWindowMetrics.bounds.width()
+        } else {
+            zero()
+        }
+
+        val windowHeight = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            requireActivity().windowManager.currentWindowMetrics.bounds.height()
+        } else {
+            zero()
+        }
+
+        val maxXShift = windowWidth / MAX_WINDOW_WIDTH
+
+        val callback = object : OnBackPressedCallback(enabled = true) {
+            var controller: TransitionSeekController? = null
+
+            @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            override fun handleOnBackStarted(backEvent: BackEventCompat) {
+                controller = TransitionManager.controlDelayedTransition(
+                        view,
+                        transitionSet
+                )
+            }
+
+            @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            override fun handleOnBackProgressed(backEvent: BackEventCompat) {
+                if (controller?.isReady == true) {
+                    controller?.currentFraction = backEvent.progress
+                }
+
+                // Shift the view based on the swipe progress
+                val backProgress = backEvent.progress
+                val interpolatedProgress = EMPHASIZED_DECELERATE.getInterpolation(backProgress)
+                val totalTranslationY = backEvent.touchY
+                    .mapRange(zero(), windowHeight, windowHeight.half().negate(), windowHeight.half())
+                    .div(MAX_WINDOW_HEIGHT)
+
+                when (backEvent.swipeEdge) {
+                    BackEventCompat.EDGE_LEFT -> {
+                        view.translationX = interpolatedProgress * maxXShift
+                        view.translationY = totalTranslationY * interpolatedProgress
+                    }
+                    BackEventCompat.EDGE_RIGHT -> {
+                        view.translationX = -(interpolatedProgress * maxXShift)
+                        view.translationY = totalTranslationY * interpolatedProgress
+                    }
+                }
+
+                view.scaleX = 1F - (0.1F * interpolatedProgress)
+                view.scaleY = 1F - (0.1F * interpolatedProgress)
+                // view.alpha = 1F - (0.5F * interpolatedProgress)
+            }
+
+            @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            override fun handleOnBackPressed() {
+                Log.d(TAG, "handleOnBackPressed: ")
+                // Finish playing the transition when the user commits back )
+                this.isEnabled = false
+                popBackStack()
+            }
+
+            @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            override fun handleOnBackCancelled() {
+                Log.d(TAG, "handleOnBackCancelled: ")
+                // If the user cancels the back gesture, reset the state
+                resetCallbackState()
+            }
+
+            private fun resetCallbackState() {
+                // Animate the view back to its original position
+                view.animate().translationX(0F).scaleX(1F).scaleY(1F).start()
+            }
+        }
+
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, callback)
     }
 
     /**
@@ -526,12 +737,6 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
     protected fun openFragmentArc(fragment: ScopedFragment, icon: View, tag: String? = null, duration: Long? = null) {
         fragment.setArcTransitions(duration ?: resources.getInteger(R.integer.animation_duration).toLong())
 
-        //        try {
-        //            (fragment.exitTransition as TransitionSet?)?.excludeTarget(icon, true)
-        //        } catch (e: java.lang.ClassCastException) {
-        //            (fragment.exitTransition as MaterialContainerTransform?)?.excludeTarget(icon, true)
-        //        }
-
         try {
             val transaction = requireActivity().supportFragmentManager.beginTransaction().apply {
                 setReorderingAllowed(true)
@@ -558,11 +763,11 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
     }
 
     protected fun openAppInfo(packageInfo: PackageInfo, icon: ImageView) {
-        openFragmentArc(AppInfo.newInstance(packageInfo), icon, "app_info_${packageInfo.packageName}")
+        openFragmentArc(AppInfo.newInstance(packageInfo), icon, AppInfo.TAG)
     }
 
     protected fun openAppSearch() {
-        openFragmentSlide(Search.newInstance(true), "search")
+        openFragmentSlide(Search.newInstance(true), Search.TAG)
     }
 
     private fun getPackageInfoFromBundle(): PackageInfo {
@@ -578,12 +783,11 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requireContext().packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(PackageUtils.flags))
         } else {
-            @Suppress("DEPRECATION")
             requireContext().packageManager.getPackageInfo(packageName, PackageUtils.flags.toInt())
         }
     }
 
-    @Suppress("unused", "UNUSED_VARIABLE")
+    @Suppress("unused", "UNUSED_VARIABLE", "UnusedReceiverParameter")
     @RequiresApi(Build.VERSION_CODES.R)
     protected fun View.setKeyboardChangeListener() {
         val cb = object : WindowInsetsAnimation.Callback(DISPATCH_MODE_STOP) {
@@ -642,7 +846,11 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
     }
 
     protected fun popBackStack() {
-        requireActivity().supportFragmentManager.popBackStack()
+        if (requireActivity().supportFragmentManager.backStackEntryCount > 0) {
+            requireActivity().supportFragmentManager.popBackStack()
+        } else {
+            goBack()
+        }
     }
 
     protected fun postDelayed(delay: Long, action: () -> Unit) {
@@ -655,5 +863,18 @@ abstract class ScopedFragment : Fragment(), SharedPreferences.OnSharedPreference
 
     protected fun removeHandlerCallbacks() {
         handler.removeCallbacksAndMessages(null)
+    }
+
+    companion object {
+        private val EMPHASIZED_DECELERATE = PathInterpolator(0.05f, 0.7f, 0.1f, 1f)
+
+        /**
+         * Lower values will result in a more emphasized movement
+         */
+        private const val MAX_WINDOW_WIDTH = 20
+        private const val MAX_WINDOW_HEIGHT = 5
+
+        private const val TAG = "ScopedFragment"
+        private const val BOTTOM_MENU_POSITION = "bottom_menu_position"
     }
 }

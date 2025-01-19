@@ -1,5 +1,6 @@
 package app.simple.inure.ui.panels
 
+import android.app.SearchManager
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageInfo
@@ -19,15 +20,18 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterTags
 import app.simple.inure.adapters.menus.AdapterMenu
-import app.simple.inure.apk.parsers.FOSSParser
+import app.simple.inure.adapters.viewers.AdapterTags
 import app.simple.inure.apk.utils.PackageUtils.isPackageInstalledAndEnabled
 import app.simple.inure.apk.utils.PackageUtils.isSplitApk
 import app.simple.inure.apk.utils.PackageUtils.launchThisPackage
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.BundleConstants
+import app.simple.inure.decorations.ripple.DynamicRippleConstraintLayout
 import app.simple.inure.decorations.ripple.DynamicRippleImageButton
 import app.simple.inure.decorations.ripple.DynamicRippleTextView
+import app.simple.inure.decorations.theme.ThemeDivider
+import app.simple.inure.decorations.toggles.Switch
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.AppIconImageView
 import app.simple.inure.decorations.views.GridRecyclerView
@@ -46,6 +50,7 @@ import app.simple.inure.dialogs.action.Uninstaller.Companion.uninstallPackage
 import app.simple.inure.dialogs.action.UpdatesUninstaller.Companion.showUpdatesUninstaller
 import app.simple.inure.dialogs.app.Sure.Companion.newSureInstance
 import app.simple.inure.dialogs.appinfo.FdroidStores.Companion.showFdroidStores
+import app.simple.inure.dialogs.appinfo.SearchBox.Companion.showSearchBox
 import app.simple.inure.dialogs.miscellaneous.StoragePermission
 import app.simple.inure.dialogs.miscellaneous.StoragePermission.Companion.showStoragePermissionDialog
 import app.simple.inure.dialogs.tags.AddTag.Companion.showAddTagDialog
@@ -53,18 +58,20 @@ import app.simple.inure.extensions.fragments.ScopedFragment
 import app.simple.inure.factories.panels.PackageInfoFactory
 import app.simple.inure.glide.util.ImageLoader.loadAPKIcon
 import app.simple.inure.glide.util.ImageLoader.loadAppIcon
+import app.simple.inure.interfaces.appinfo.SearchBoxCallbacks
 import app.simple.inure.interfaces.fragments.SureCallbacks
 import app.simple.inure.popups.tags.PopupTagMenu
 import app.simple.inure.preferences.AccessibilityPreferences
 import app.simple.inure.preferences.AppInformationPreferences
+import app.simple.inure.preferences.ConfigurationPreferences
 import app.simple.inure.preferences.DevelopmentPreferences
+import app.simple.inure.preferences.TrialPreferences
 import app.simple.inure.ui.editor.NotesEditor
-import app.simple.inure.ui.installer.Installer
 import app.simple.inure.ui.subpanels.TaggedApps
 import app.simple.inure.ui.viewers.Activities
 import app.simple.inure.ui.viewers.Boot
 import app.simple.inure.ui.viewers.Certificate
-import app.simple.inure.ui.viewers.Dexs
+import app.simple.inure.ui.viewers.DexClasses
 import app.simple.inure.ui.viewers.Extras
 import app.simple.inure.ui.viewers.Features
 import app.simple.inure.ui.viewers.Graphics
@@ -79,17 +86,19 @@ import app.simple.inure.ui.viewers.SharedLibs
 import app.simple.inure.ui.viewers.Trackers
 import app.simple.inure.ui.viewers.UsageStatistics
 import app.simple.inure.ui.viewers.UsageStatisticsGraph
-import app.simple.inure.ui.viewers.XMLViewerTextView
-import app.simple.inure.ui.viewers.XMLViewerWebView
+import app.simple.inure.ui.viewers.XML
+import app.simple.inure.ui.viewers.XMLWebView
+import app.simple.inure.util.AdapterUtils.setAppVisualStates
 import app.simple.inure.util.ConditionUtils.invert
 import app.simple.inure.util.FileUtils.toFile
+import app.simple.inure.util.InfoStripUtils.getAppInfo
 import app.simple.inure.util.MarketUtils
-import app.simple.inure.util.PackageListUtils.getAppInfo
 import app.simple.inure.util.PermissionUtils.checkStoragePermission
 import app.simple.inure.util.ViewUtils.gone
 import app.simple.inure.util.ViewUtils.visible
-import app.simple.inure.viewmodels.panels.AppInfoMenuViewModel
+import app.simple.inure.viewmodels.panels.AppInfoViewModel
 import app.simple.inure.viewmodels.panels.TagsViewModel
+import app.simple.inure.ui.viewers.SharedPreferences.Companion as SharedPreferences_Alias
 
 class AppInfo : ScopedFragment() {
 
@@ -101,6 +110,10 @@ class AppInfo : ScopedFragment() {
     private lateinit var appInformation: DynamicRippleTextView
     private lateinit var usageStatistics: DynamicRippleTextView
     private lateinit var notes: DynamicRippleTextView
+    private lateinit var batteryOptimization: DynamicRippleConstraintLayout
+    private lateinit var batteryOptimizationState: TypeFaceTextView
+    private lateinit var batteryOptimizationSwitch: Switch
+    private lateinit var divider1: ThemeDivider
     private lateinit var tagsRecyclerView: TagsRecyclerView
     private lateinit var meta: GridRecyclerView
     private lateinit var actions: GridRecyclerView
@@ -113,7 +126,7 @@ class AppInfo : ScopedFragment() {
     private lateinit var foldActionsMenu: DynamicRippleImageButton
     private lateinit var foldMiscMenu: DynamicRippleImageButton
 
-    private lateinit var componentsViewModel: AppInfoMenuViewModel
+    private lateinit var appInfoViewModel: AppInfoViewModel
     private lateinit var tagsViewModel: TagsViewModel
     private lateinit var packageInfoFactory: PackageInfoFactory
 
@@ -131,6 +144,10 @@ class AppInfo : ScopedFragment() {
         appInformation = view.findViewById(R.id.app_info_information_tv)
         usageStatistics = view.findViewById(R.id.app_info_storage_tv)
         notes = view.findViewById(R.id.app_info_notes_tv)
+        batteryOptimization = view.findViewById(R.id.app_info_battery_optimization)
+        batteryOptimizationState = view.findViewById(R.id.battery_optimization_state)
+        batteryOptimizationSwitch = view.findViewById(R.id.battery_optimization_switch)
+        divider1 = view.findViewById(R.id.app_info_divider_1)
         tagsRecyclerView = view.findViewById(R.id.tags_recycler_view)
         meta = view.findViewById(R.id.app_info_menu)
         actions = view.findViewById(R.id.app_info_options)
@@ -150,7 +167,7 @@ class AppInfo : ScopedFragment() {
         foldMiscMenu = view.findViewById(R.id.fold_app_info_misc)
 
         packageInfoFactory = PackageInfoFactory(packageInfo)
-        componentsViewModel = ViewModelProvider(this, packageInfoFactory)[AppInfoMenuViewModel::class.java]
+        appInfoViewModel = ViewModelProvider(this, packageInfoFactory)[AppInfoViewModel::class.java]
         tagsViewModel = ViewModelProvider(requireActivity())[TagsViewModel::class.java]
 
         metaMenuState()
@@ -165,11 +182,11 @@ class AppInfo : ScopedFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        componentsViewModel.getTags().observe(viewLifecycleOwner) { list ->
+        appInfoViewModel.getTags().observe(viewLifecycleOwner) { list ->
             tagsRecyclerView.adapter = AdapterTags(list).apply {
                 setOnTagCallbackListener(object : AdapterTags.Companion.TagsCallback {
                     override fun onTagClicked(tag: String) {
-                        openFragmentSlide(TaggedApps.newInstance(tag), "tagged_apps")
+                        openFragmentSlide(TaggedApps.newInstance(tag), TaggedApps.TAG)
                     }
 
                     override fun onTagLongClicked(tag: String) {
@@ -195,7 +212,42 @@ class AppInfo : ScopedFragment() {
             }
         }
 
-        componentsViewModel.getComponentsOptions().observe(viewLifecycleOwner) {
+        if (ConfigurationPreferences.isRootOrShizuku()) {
+            if (TrialPreferences.isFullVersion() || TrialPreferences.isWithinTrialPeriod()) {
+                batteryOptimization.visible(animate = false)
+                divider1.visible(animate = false)
+
+                appInfoViewModel.getBatteryOptimization().observe(viewLifecycleOwner) {
+                    batteryOptimizationSwitch.isChecked = it.isOptimized
+
+                    if (it.isOptimized) {
+                        batteryOptimizationState.setTextWithAnimation(getString(R.string.optimized), 250L)
+                    } else {
+                        batteryOptimizationState.setTextWithAnimation(getString(R.string.not_optimized), 250L)
+                    }
+
+                    batteryOptimizationSwitch.setOnSwitchCheckedChangeListener { isChecked ->
+                        if (isChecked) {
+                            appInfoViewModel.setBatteryOptimization(packageInfo, true)
+                        } else {
+                            appInfoViewModel.setBatteryOptimization(packageInfo, false)
+                        }
+                    }
+
+                    batteryOptimization.setOnClickListener {
+                        batteryOptimizationSwitch.toggle()
+                    }
+                }
+            } else {
+                batteryOptimization.gone()
+                divider1.gone()
+            }
+        } else {
+            batteryOptimization.gone()
+            divider1.gone()
+        }
+
+        appInfoViewModel.getComponentsOptions().observe(viewLifecycleOwner) {
             when (AppInformationPreferences.getMetaMenuLayout()) {
                 AppInformationPreferences.MENU_LAYOUT_HORIZONTAL -> {
                     meta.layoutManager = LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false)
@@ -227,84 +279,84 @@ class AppInfo : ScopedFragment() {
                 override fun onAppInfoMenuClicked(source: Int, icon: ImageView) {
                     when (source) {
                         R.string.manifest -> {
-                            if (DevelopmentPreferences.get(DevelopmentPreferences.isWebViewXmlViewer)) {
-                                openFragmentArc(XMLViewerWebView.newInstance(
-                                        packageInfo, true, "AndroidManifest.xml"), icon, "manifest")
+                            if (DevelopmentPreferences.get(DevelopmentPreferences.IS_WEBVIEW_XML_VIEWER)) {
+                                openFragmentArc(XMLWebView.newInstance(
+                                        packageInfo, "AndroidManifest.xml"), icon, XMLWebView.TAG)
                             } else {
-                                openFragmentArc(XMLViewerTextView.newInstance(
-                                        packageInfo, true, "AndroidManifest.xml"), icon, "manifest")
+                                openFragmentArc(XML.newInstance(
+                                        packageInfo, true, "AndroidManifest.xml"), icon, XMLWebView.TAG)
                             }
                         }
 
                         R.string.services -> {
-                            openFragmentArc(Services.newInstance(packageInfo), icon, "services")
+                            openFragmentArc(Services.newInstance(packageInfo), icon, Services.TAG)
                         }
 
                         R.string.activities -> {
-                            openFragmentArc(Activities.newInstance(packageInfo), icon, "activities")
+                            openFragmentArc(Activities.newInstance(packageInfo), icon, Activities.TAG)
                         }
 
                         R.string.providers -> {
-                            openFragmentArc(Providers.newInstance(packageInfo), icon, "providers")
+                            openFragmentArc(Providers.newInstance(packageInfo), icon, Providers.TAG)
                         }
 
                         R.string.permissions -> {
-                            openFragmentArc(Permissions.newInstance(packageInfo), icon, "permissions")
+                            openFragmentArc(Permissions.newInstance(packageInfo), icon, Permissions.TAG)
                         }
 
                         R.string.certificate -> {
-                            openFragmentArc(Certificate.newInstance(packageInfo, null), icon, "certificate")
+                            openFragmentArc(Certificate.newInstance(packageInfo, null), icon, Certificate.TAG)
                         }
 
                         R.string.receivers -> {
-                            openFragmentArc(Receivers.newInstance(packageInfo), icon, "broadcasts")
+                            openFragmentArc(Receivers.newInstance(packageInfo), icon, Receivers.TAG)
                         }
 
                         R.string.resources -> {
-                            openFragmentArc(Resources.newInstance(packageInfo), icon, "resources")
+                            openFragmentArc(Resources.newInstance(packageInfo), icon, Resources.TAG)
                         }
 
                         R.string.uses_feature -> {
-                            openFragmentArc(Features.newInstance(packageInfo), icon, "uses_feature")
+                            openFragmentArc(Features.newInstance(packageInfo), icon, Features.TAG)
                         }
 
                         R.string.graphics -> {
-                            openFragmentArc(Graphics.newInstance(packageInfo), icon, "graphics")
+                            openFragmentArc(Graphics.newInstance(packageInfo), icon, Graphics.TAG)
                         }
 
                         R.string.extras -> {
-                            openFragmentArc(Extras.newInstance(packageInfo), icon, "extras")
+                            openFragmentArc(Extras.newInstance(packageInfo), icon, Extras.TAG)
                         }
 
                         R.string.shared_libs -> {
-                            openFragmentArc(SharedLibs.newInstance(packageInfo), icon, "shared_libs")
+                            openFragmentArc(SharedLibs.newInstance(packageInfo), icon, SharedLibs.TAG)
                         }
 
                         R.string.dex_classes -> {
-                            openFragmentArc(Dexs.newInstance(packageInfo), icon, "dexs")
+                            openFragmentArc(DexClasses.newInstance(packageInfo), icon, DexClasses.TAG)
                         }
 
                         R.string.trackers -> {
-                            openFragmentArc(Trackers.newInstance(packageInfo), icon, "trackers")
+                            openFragmentArc(Trackers.newInstance(packageInfo), icon, Trackers.TAG)
                         }
 
                         R.string.operations -> {
-                            openFragmentArc(Operations.newInstance(packageInfo), icon, "ops")
+                            openFragmentArc(Operations.newInstance(packageInfo), icon, Operations.TAG)
                         }
 
                         R.string.boot -> {
-                            openFragmentArc(Boot.newInstance(packageInfo), icon, "boot")
+                            openFragmentArc(Boot.newInstance(packageInfo), icon, Boot.TAG)
                         }
 
                         R.string.shared_prefs -> {
-                            openFragmentArc(app.simple.inure.ui.viewers.SharedPreferences.newInstance(packageInfo), icon, "shared_prefs")
+                            openFragmentArc(SharedPreferences_Alias.newInstance(packageInfo), icon, SharedPreferences_Alias.TAG)
                         }
                     }
                 }
             })
         }
 
-        componentsViewModel.getActionsOptions().observe(viewLifecycleOwner) { it ->
+        appInfoViewModel.getActionsOptions().observe(viewLifecycleOwner) { it ->
 
             when (AppInformationPreferences.getActionMenuLayout()) {
                 AppInformationPreferences.MENU_LAYOUT_HORIZONTAL -> {
@@ -335,6 +387,8 @@ class AppInfo : ScopedFragment() {
                                 showWarning(e.message ?: getString(R.string.error))
                             } catch (e: NameNotFoundException) {
                                 showWarning(e.message ?: getString(R.string.error))
+                            } catch (e: SecurityException) {
+                                showWarning(e.message ?: getString(R.string.error))
                             }
                         }
 
@@ -342,7 +396,7 @@ class AppInfo : ScopedFragment() {
                             childFragmentManager.newSureInstance().setOnSureCallbackListener(object : SureCallbacks {
                                 override fun onSure() {
                                     childFragmentManager.uninstallPackage(packageInfo) {
-                                        requireActivity().supportFragmentManager.popBackStackImmediate()
+                                        popBackStack()
                                     }
                                 }
                             })
@@ -352,8 +406,13 @@ class AppInfo : ScopedFragment() {
                             childFragmentManager.newSureInstance().setOnSureCallbackListener(object : SureCallbacks {
                                 override fun onSure() {
                                     childFragmentManager.showUpdatesUninstaller(packageInfo) {
-                                        componentsViewModel.unsetUpdateFlag()
-                                        componentsViewModel.loadActionOptions()
+                                        try {
+                                            packageInfo = appInfoViewModel.reinitPackageInfo()
+                                        } catch (e: NameNotFoundException) {
+                                            showWarning(e.message ?: getString(R.string.error), goBack = false)
+                                        }
+
+                                        appInfoViewModel.loadActionOptions()
                                     }
                                 }
                             })
@@ -368,7 +427,7 @@ class AppInfo : ScopedFragment() {
                                         override fun onReinstallSuccess() {
                                             if (wasAppInstalled.invert()) {
                                                 icon.loadAppIcon(packageInfo.packageName, enabled = true)
-                                                componentsViewModel.loadActionOptions()
+                                                appInfoViewModel.loadActionOptions()
                                             }
                                         }
                                     })
@@ -379,32 +438,32 @@ class AppInfo : ScopedFragment() {
                             val uri = FileProvider.getUriForFile(
                                     /* context = */ requireActivity().applicationContext,
                                     /* authority = */ "${requireContext().packageName}.provider",
-                                    /* file = */ packageInfo.applicationInfo.sourceDir.toFile())
+                                    /* file = */ packageInfo.safeApplicationInfo.sourceDir.toFile())
 
                             openFragmentArc(Installer.newInstance(
-                                    uri, this@AppInfo.icon.transitionName), this@AppInfo.icon, "installer")
+                                    uri, this@AppInfo.icon.transitionName), this@AppInfo.icon, Installer.TAG)
                         }
 
                         R.string.send -> {
-                            Send.newInstance(packageInfo).show(childFragmentManager, "prepare_send_files")
+                            Send.newInstance(packageInfo).show(childFragmentManager, Send.TAG)
                         }
 
                         R.string.clear_data -> {
                             onSure {
-                                ClearData.newInstance(packageInfo).show(parentFragmentManager, "shell_executor")
+                                ClearData.newInstance(packageInfo).show(parentFragmentManager, ClearData.TAG)
                             }
                         }
 
                         R.string.clear_cache -> {
                             onSure {
-                                ClearCache.newInstance(packageInfo).show(parentFragmentManager, "clear_cache")
+                                ClearCache.newInstance(packageInfo).show(parentFragmentManager, ClearCache.TAG)
                             }
                         }
 
                         R.string.force_stop -> {
                             childFragmentManager.newSureInstance().setOnSureCallbackListener(object : SureCallbacks {
                                 override fun onSure() {
-                                    ForceStop.newInstance(packageInfo).show(childFragmentManager, "force_stop")
+                                    ForceStop.newInstance(packageInfo).show(childFragmentManager, ForceStop.TAG)
                                 }
                             })
                         }
@@ -413,7 +472,7 @@ class AppInfo : ScopedFragment() {
                             childFragmentManager.newSureInstance().setOnSureCallbackListener(object : SureCallbacks {
                                 override fun onSure() {
                                     childFragmentManager.showState(packageInfo).onSuccess = {
-                                        componentsViewModel.loadActionOptions()
+                                        appInfoViewModel.loadActionOptions()
                                     }
                                 }
                             })
@@ -423,7 +482,7 @@ class AppInfo : ScopedFragment() {
                             childFragmentManager.newSureInstance().setOnSureCallbackListener(object : SureCallbacks {
                                 override fun onSure() {
                                     childFragmentManager.showHide(packageInfo).onSuccess = {
-                                        componentsViewModel.loadActionOptions()
+                                        appInfoViewModel.loadActionOptions()
                                     }
                                 }
                             })
@@ -440,23 +499,23 @@ class AppInfo : ScopedFragment() {
                         }
 
                         R.string.change_logs -> {
-                            openFragmentSlide(WebPage.newInstance(getString(R.string.change_logs)), "change_logs")
+                            openFragmentSlide(WebPage.newInstance(getString(R.string.change_logs)), WebPage.TAG)
                         }
 
                         R.string.credits -> {
-                            openFragmentSlide(WebPage.newInstance(getString(R.string.credits)), "credits")
+                            openFragmentSlide(WebPage.newInstance(getString(R.string.credits)), WebPage.TAG)
                         }
 
                         R.string.translate -> {
-                            openFragmentSlide(WebPage.newInstance(getString(R.string.translate)), "translate")
+                            openFragmentSlide(WebPage.newInstance(getString(R.string.translate)), WebPage.TAG)
                         }
 
                         R.string.preferences -> {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                                 if (packageInfo.packageName == requireContext().packageName) {
-                                    openFragmentArc(Preferences.newInstance(), icon, "preferences")
+                                    openFragmentArc(Preferences.newInstance(), icon, Preferences.TAG)
                                 } else {
-                                    try {
+                                    runCatching {
                                         requirePackageManager().queryIntentActivities(Intent(Intent.ACTION_APPLICATION_PREFERENCES), 0)
                                             .forEach {
                                                 if (it.activityInfo.packageName == packageInfo.packageName) {
@@ -465,10 +524,49 @@ class AppInfo : ScopedFragment() {
                                                     })
                                                 }
                                             }
-                                    } catch (e: SecurityException) {
-                                        showWarning(e.message ?: getString(R.string.error), goBack = false)
+                                    }.onFailure {
+                                        showWarning(it.message ?: getString(R.string.error), goBack = false)
                                     }
                                 }
+                            }
+                        }
+
+                        R.string.search -> {
+                            childFragmentManager.showSearchBox(SearchBoxCallbacks { query ->
+                                runCatching {
+                                    requirePackageManager().queryIntentActivities(Intent(Intent.ACTION_SEARCH), 0)
+                                        .forEach {
+                                            if (it.activityInfo.packageName == packageInfo.packageName) {
+                                                startActivity(Intent(Intent.ACTION_SEARCH).apply {
+                                                    setClassName(packageInfo.packageName, it.activityInfo.name)
+                                                    putExtra(SearchManager.QUERY, query)
+                                                })
+                                            }
+                                        }
+                                }.onFailure {
+                                    showWarning(it.message ?: getString(R.string.error), goBack = false)
+                                }
+                            })
+                        }
+
+                        R.string.manage_space -> {
+                            runCatching {
+                                startActivity(Intent().apply {
+                                    setClassName(packageInfo.packageName, packageInfo.safeApplicationInfo.manageSpaceActivityName)
+                                })
+                            }.onFailure {
+                                showWarning(it.message ?: getString(R.string.error))
+                            }
+                        }
+                        R.string.links -> {
+                            try {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    startActivity(Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS).apply {
+                                        data = Uri.fromParts("package", packageInfo.packageName, null)
+                                    })
+                                }
+                            } catch (e: Exception) {
+                                showWarning(e.message ?: getString(R.string.error))
                             }
                         }
                     }
@@ -476,7 +574,7 @@ class AppInfo : ScopedFragment() {
             })
         }
 
-        componentsViewModel.getTrackers().observe(viewLifecycleOwner) {
+        appInfoViewModel.getTrackers().observe(viewLifecycleOwner) {
             val details = requireContext().getAppInfo(packageInfo)
 
             if (details.isEmpty()) {
@@ -486,11 +584,12 @@ class AppInfo : ScopedFragment() {
                 details.append(getString(R.string.trackers_count, it))
             }
 
+            this.details.alpha = 0F
             this.details.text = details
+            this.details.animate().alpha(1F).start()
         }
 
-        componentsViewModel.getMiscellaneousItems().observe(viewLifecycleOwner) {
-
+        appInfoViewModel.getMiscellaneousItems().observe(viewLifecycleOwner) {
             when (AppInformationPreferences.getMiscMenuLayout()) {
                 AppInformationPreferences.MENU_LAYOUT_HORIZONTAL -> {
                     miscellaneous.layoutManager = LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false)
@@ -531,26 +630,22 @@ class AppInfo : ScopedFragment() {
                         }
 
                         R.string.play_store -> {
-                            MarketUtils.openAppOnPlayStore(requireContext(), packageInfo.packageName)
-                        }
-
-                        R.string.amazon -> {
-                            MarketUtils.openAppOnAmazonStore(requireContext(), packageInfo.packageName)
+                            try {
+                                MarketUtils.openAppOnPlayStore(requireContext(), packageInfo.packageName)
+                            } catch (e: Exception) {
+                                showWarning(e.message ?: getString(R.string.error))
+                            }
                         }
 
                         R.string.fdroid -> {
                             childFragmentManager.showFdroidStores(packageInfo)
-                        }
-
-                        R.string.galaxy_store -> {
-                            MarketUtils.openAppOnGalaxyStore(requireContext(), packageInfo.packageName)
                         }
                     }
                 }
             })
         }
 
-        componentsViewModel.getError().observe(viewLifecycleOwner) {
+        appInfoViewModel.getError().observe(viewLifecycleOwner) {
             showError(it)
         }
 
@@ -558,32 +653,36 @@ class AppInfo : ScopedFragment() {
 
         try {
             icon.loadAppIcon(packageInfo.packageName,
-                             packageInfo.applicationInfo.enabled,
-                             packageInfo.applicationInfo.sourceDir.toFile())
+                             packageInfo.safeApplicationInfo.enabled,
+                             packageInfo.safeApplicationInfo.sourceDir.toFile())
         } catch (e: NullPointerException) {
-            icon.loadAPKIcon(packageInfo.applicationInfo.sourceDir)
+            try {
+                icon.loadAPKIcon(packageInfo.safeApplicationInfo.sourceDir)
+            } catch (e: NullPointerException) {
+                icon.setImageResource(R.drawable.ic_app_icon)
+            }
         }
 
         name.apply {
-            text = packageInfo.applicationInfo.name
-            setFOSSIcon(FOSSParser.isPackageFOSS(packageInfo.packageName))
+            text = packageInfo.safeApplicationInfo.name
+            setAppVisualStates(packageInfo)
         }
         packageId.text = packageInfo.packageName
 
         appInformation.setOnClickListener {
-            openFragmentSlide(Information.newInstance(packageInfo), "information")
+            openFragmentSlide(Information.newInstance(packageInfo), Information.TAG)
         }
 
         usageStatistics.setOnClickListener {
-            if (DevelopmentPreferences.get(DevelopmentPreferences.useOldStyleUsageStatsPanel)) {
-                openFragmentSlide(UsageStatistics.newInstance(packageInfo), "usage_statistics")
+            if (DevelopmentPreferences.get(DevelopmentPreferences.USE_OLD_STYLE_USAGE_STATS_PANEL)) {
+                openFragmentSlide(UsageStatistics.newInstance(packageInfo), UsageStatistics.TAG)
             } else {
-                openFragmentSlide(UsageStatisticsGraph.newInstance(packageInfo), "usage_statistics")
+                openFragmentSlide(UsageStatisticsGraph.newInstance(packageInfo), UsageStatisticsGraph.TAG)
             }
         }
 
         notes.setOnClickListener {
-            openFragmentSlide(NotesEditor.newInstance(packageInfo), "notes_viewer")
+            openFragmentSlide(NotesEditor.newInstance(packageInfo), NotesEditor.TAG)
         }
 
         foldMetaDataMenu.setOnClickListener {
@@ -670,40 +769,40 @@ class AppInfo : ScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            AppInformationPreferences.metaMenuState -> {
+            AppInformationPreferences.META_MENU_STATE -> {
                 metaMenuState()
-                componentsViewModel.loadMetaOptions()
+                appInfoViewModel.loadMetaOptions()
             }
 
-            AppInformationPreferences.actionMenuState -> {
+            AppInformationPreferences.ACTION_MENU_STATE -> {
                 actionMenuState()
-                componentsViewModel.loadActionOptions()
+                appInfoViewModel.loadActionOptions()
             }
 
-            AppInformationPreferences.miscMenuState -> {
+            AppInformationPreferences.MISC_MENU_STATE -> {
                 miscMenuState()
-                componentsViewModel.loadMiscellaneousItems()
+                appInfoViewModel.loadMiscellaneousItems()
             }
 
-            AppInformationPreferences.menuLayout -> {
+            AppInformationPreferences.MENU_LAYOUT -> {
                 /**
                  * Load all the menus back again
                  */
-                componentsViewModel.loadMiscellaneousItems()
-                componentsViewModel.loadMetaOptions()
-                componentsViewModel.loadActionOptions()
+                appInfoViewModel.loadMiscellaneousItems()
+                appInfoViewModel.loadMetaOptions()
+                appInfoViewModel.loadActionOptions()
             }
 
-            AppInformationPreferences.metaMenuLayout -> {
-                componentsViewModel.loadMetaOptions()
+            AppInformationPreferences.META_MENU_LAYOUT -> {
+                appInfoViewModel.loadMetaOptions()
             }
 
-            AppInformationPreferences.actionMenuLayout -> {
-                componentsViewModel.loadActionOptions()
+            AppInformationPreferences.ACTION_MENU_LAYOUT -> {
+                appInfoViewModel.loadActionOptions()
             }
 
-            AppInformationPreferences.miscMenuLayout -> {
-                componentsViewModel.loadMiscellaneousItems()
+            AppInformationPreferences.MISC_MENU_LAYOUT -> {
+                appInfoViewModel.loadMiscellaneousItems()
             }
         }
     }
@@ -716,5 +815,7 @@ class AppInfo : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "app_info"
     }
 }

@@ -61,7 +61,11 @@ class AboutScreen : ScopedFragment() {
         setAppVersionTag()
 
         if (TrialPreferences.isFullVersion()) {
-            version.append("-full")
+            if (TrialPreferences.isUnlockerVerificationRequired()) {
+                version.append("-full_unlckr")
+            } else {
+                version.append("-full_grdlkey")
+            }
         } else {
             version.append("-trial (${TrialPreferences.getDaysLeft()} days left)")
         }
@@ -104,7 +108,7 @@ class AboutScreen : ScopedFragment() {
         }
 
         share.setOnClickListener {
-            openFragmentSlide(Share.newInstance(), "share")
+            openFragmentSlide(Share.newInstance(), Share.TAG)
         }
     }
 
@@ -153,5 +157,7 @@ class AboutScreen : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "AboutScreen"
     }
 }

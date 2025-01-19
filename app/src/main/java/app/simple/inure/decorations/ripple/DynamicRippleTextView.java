@@ -8,8 +8,6 @@ import android.graphics.Color;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 
-import java.util.Objects;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.interpolator.view.animation.LinearOutSlowInInterpolator;
@@ -22,6 +20,7 @@ import app.simple.inure.preferences.AppearancePreferences;
 import app.simple.inure.preferences.DevelopmentPreferences;
 import app.simple.inure.themes.manager.Theme;
 import app.simple.inure.themes.manager.ThemeManager;
+import app.simple.inure.util.ColorUtils;
 import app.simple.inure.util.ViewUtils;
 
 /**
@@ -29,6 +28,8 @@ import app.simple.inure.util.ViewUtils;
  * background
  */
 public class DynamicRippleTextView extends TypeFaceTextView {
+    
+    private int highlightColor = -1;
     
     public DynamicRippleTextView(@NonNull Context context) {
         super(context);
@@ -63,7 +64,7 @@ public class DynamicRippleTextView extends TypeFaceTextView {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN: {
+            case MotionEvent.ACTION_DOWN -> {
                 if (AccessibilityPreferences.INSTANCE.isHighlightMode() && isClickable()) {
                     animate()
                             .scaleY(0.8F)
@@ -98,20 +99,18 @@ public class DynamicRippleTextView extends TypeFaceTextView {
                     return super.onTouchEvent(event);
                 }
             }
-            case MotionEvent.ACTION_MOVE:
-            case MotionEvent.ACTION_CANCEL:
-            case MotionEvent.ACTION_UP: {
+            case MotionEvent.ACTION_MOVE, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
                 if (AccessibilityPreferences.INSTANCE.isHighlightMode() && isClickable()) {
                     animate()
                             .scaleY(1F)
                             .scaleX(1F)
                             .alpha(1F)
-                            .setStartDelay(50)
                             .setInterpolator(new LinearOutSlowInInterpolator())
                             .setDuration(getResources().getInteger(R.integer.animation_duration))
                             .start();
                 }
-                break;
+                
+                return super.onTouchEvent(event);
             }
         }
         return super.onTouchEvent(event);
@@ -136,17 +135,23 @@ public class DynamicRippleTextView extends TypeFaceTextView {
         if (AccessibilityPreferences.INSTANCE.isHighlightMode()) {
             setBackgroundTintList(ColorStateList.valueOf(Color.TRANSPARENT));
         } else {
-            setBackgroundTintList(ColorStateList.valueOf(ThemeManager.INSTANCE.getTheme().getViewGroupTheme().getSelectedBackground()));
+            setBackgroundTintList(ColorStateList.valueOf(
+                    ThemeManager.INSTANCE.getTheme().getViewGroupTheme().getSelectedBackground()));
         }
     }
     
     private void setHighlightBackgroundColor() {
         if (AccessibilityPreferences.INSTANCE.isHighlightMode()) {
-            LayoutBackground.setBackground(getContext(), this, null, Misc.roundedCornerFactor);
-            setBackgroundTintList(ColorStateList.valueOf(ThemeManager.INSTANCE.getTheme().getViewGroupTheme().getHighlightBackground()));
+            if (highlightColor == -1) {
+                LayoutBackground.setBackground(getContext(), this, null, Misc.roundedCornerFactor, highlightColor);
+                setBackgroundTintList(ColorStateList.valueOf(ThemeManager.INSTANCE.getTheme().getViewGroupTheme().getHighlightBackground()));
+            } else {
+                LayoutBackground.setBackground(getContext(), this, null, Misc.roundedCornerFactor, highlightColor);
+                setBackgroundTintList(ColorStateList.valueOf(ColorUtils.INSTANCE.changeAlpha(highlightColor, Misc.highlightColorAlpha)));
+            }
         } else {
             setBackground(null);
-            if (DevelopmentPreferences.INSTANCE.get(DevelopmentPreferences.paddingLessPopupMenus)) {
+            if (DevelopmentPreferences.INSTANCE.get(DevelopmentPreferences.PADDING_LESS_POPUP_MENUS)) {
                 setBackground(Utils.getRippleDrawable(getBackground()));
             } else {
                 setBackground(Utils.getRippleDrawable(getBackground(), Misc.roundedCornerFactor));
@@ -157,10 +162,16 @@ public class DynamicRippleTextView extends TypeFaceTextView {
     @Override
     public void onSharedPreferenceChanged(@Nullable SharedPreferences sharedPreferences, @Nullable String key) {
         super.onSharedPreferenceChanged(sharedPreferences, key);
-        if (Objects.equals(key, AppearancePreferences.accentColor) ||
-                Objects.equals(key, AccessibilityPreferences.isHighlightStroke) ||
-                Objects.equals(key, AccessibilityPreferences.isHighlightMode)) {
-            setHighlightBackgroundColor();
+        try {
+            switch (key) {
+                case AppearancePreferences.ACCENT_COLOR,
+                        AccessibilityPreferences.IS_HIGHLIGHT_STROKE,
+                        AccessibilityPreferences.IS_HIGHLIGHT_MODE -> {
+                    setHighlightBackgroundColor();
+                }
+            }
+        } catch (NullPointerException e) {
+            e.printStackTrace();
         }
     }
     
@@ -170,5 +181,9 @@ public class DynamicRippleTextView extends TypeFaceTextView {
         clearAnimation();
         setScaleX(1);
         setScaleY(1);
+    }
+    
+    public void setHighlightColor(int highlightColor) {
+        this.highlightColor = highlightColor;
     }
 }

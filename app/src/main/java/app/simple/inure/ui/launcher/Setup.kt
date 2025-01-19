@@ -16,31 +16,27 @@ import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import app.simple.inure.BuildConfig
 import app.simple.inure.R
 import app.simple.inure.constants.BundleConstants
-import app.simple.inure.decorations.checkbox.InureCheckBox
 import app.simple.inure.decorations.ripple.DynamicRippleLinearLayout
 import app.simple.inure.decorations.ripple.DynamicRippleTextView
-import app.simple.inure.decorations.switchview.SwitchView
+import app.simple.inure.decorations.toggles.CheckBox
+import app.simple.inure.decorations.toggles.Switch
 import app.simple.inure.decorations.typeface.TypeFaceTextView
-import app.simple.inure.extensions.fragments.ScopedFragment
+import app.simple.inure.extensions.fragments.ShizukuStateFragment
 import app.simple.inure.preferences.ConfigurationPreferences
 import app.simple.inure.preferences.SetupPreferences
+import app.simple.inure.root.RootStateHelper.setRootState
 import app.simple.inure.ui.preferences.subscreens.AccentColor
 import app.simple.inure.ui.preferences.subscreens.AppearanceTypeFace
 import app.simple.inure.util.PermissionUtils.checkForUsageAccessPermission
 import app.simple.inure.util.ViewUtils.gone
 import app.simple.inure.util.ViewUtils.invisible
 import app.simple.inure.util.ViewUtils.visible
-import com.topjohnwu.superuser.Shell
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import rikka.shizuku.ShizukuProvider
+import rikka.shizuku.Shizuku
 
-class Setup : ScopedFragment() {
+class Setup : ShizukuStateFragment() {
 
     private lateinit var usageAccess: DynamicRippleLinearLayout
     private lateinit var storageAccess: DynamicRippleLinearLayout
@@ -49,11 +45,11 @@ class Setup : ScopedFragment() {
     private lateinit var usageStatus: TypeFaceTextView
     private lateinit var storageStatus: TypeFaceTextView
     private lateinit var storageUri: TypeFaceTextView
-    private lateinit var rootSwitchView: SwitchView
-    private lateinit var shizukuSwitchView: SwitchView
+    private lateinit var rootSwitchView: Switch
     private lateinit var startApp: DynamicRippleTextView
     private lateinit var skip: DynamicRippleTextView
-    private lateinit var dontShowAgainCheckBox: InureCheckBox
+    private lateinit var dontShowAgainCheckBox: CheckBox
+    private lateinit var dontShowAgain: DynamicRippleTextView
 
     private lateinit var requestPermissionLauncher: ActivityResultLauncher<Array<String>>
 
@@ -68,10 +64,10 @@ class Setup : ScopedFragment() {
         storageStatus = view.findViewById(R.id.status_storage_access)
         storageUri = view.findViewById(R.id.status_storage_uri)
         rootSwitchView = view.findViewById(R.id.configuration_root_switch_view)
-        shizukuSwitchView = view.findViewById(R.id.setup_shizuku_switch_view)
         startApp = view.findViewById(R.id.start_app_now)
         skip = view.findViewById(R.id.skip_setup)
         dontShowAgainCheckBox = view.findViewById(R.id.show_again_checkbox)
+        dontShowAgain = view.findViewById(R.id.dont_show_again)
 
         requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             permissions.forEach {
@@ -80,15 +76,6 @@ class Setup : ScopedFragment() {
                         if (it.value) {
                             setStorageStatus()
                             showStartAppButton()
-                        }
-                    }
-                    ShizukuProvider.PERMISSION -> {
-                        if (it.value) {
-                            ConfigurationPreferences.setUsingShizuku(true)
-                            shizukuSwitchView.setChecked(true)
-                        } else {
-                            ConfigurationPreferences.setUsingShizuku(false)
-                            shizukuSwitchView.setChecked(false)
                         }
                     }
                 }
@@ -102,9 +89,10 @@ class Setup : ScopedFragment() {
         super.onViewCreated(view, savedInstanceState)
         startPostponedEnterTransition()
 
-        rootSwitchView.setChecked(ConfigurationPreferences.isUsingRoot())
-        dontShowAgainCheckBox.setChecked(SetupPreferences.isDontShowAgain())
-        shizukuSwitchView.setChecked(ConfigurationPreferences.isUsingShizuku())
+        rootSwitchView.isChecked = ConfigurationPreferences.isUsingRoot()
+        dontShowAgainCheckBox.isChecked = SetupPreferences.isDontShowAgain()
+
+        rootSwitchView.setRootState(viewLifecycleOwner = viewLifecycleOwner)
 
         usageAccess.setOnClickListener {
             val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
@@ -138,57 +126,19 @@ class Setup : ScopedFragment() {
         }
 
         accent.setOnClickListener {
-            openFragmentSlide(AccentColor.newInstance(), "accent_color")
+            openFragmentSlide(AccentColor.newInstance(), AccentColor.TAG)
         }
 
         typeface.setOnClickListener {
-            openFragmentSlide(AppearanceTypeFace.newInstance(), "app_typeface")
-        }
-
-        rootSwitchView.setOnSwitchCheckedChangeListener { it ->
-            if (it) {
-                viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-                    kotlin.runCatching {
-                        Shell.enableVerboseLogging = BuildConfig.DEBUG
-                        Shell.setDefaultBuilder(
-                                Shell.Builder
-                                    .create()
-                                    .setFlags(Shell.FLAG_REDIRECT_STDERR or Shell.FLAG_MOUNT_MASTER)
-                                    .setTimeout(10))
-                    }.getOrElse {
-                        it.printStackTrace()
-                    }
-
-                    Shell.getShell() // Request root access
-
-                    if (Shell.isAppGrantedRoot() == true) {
-                        withContext(Dispatchers.Main) {
-                            ConfigurationPreferences.setUsingRoot(true)
-                            rootSwitchView.setChecked(true)
-                        }
-                    } else {
-                        withContext(Dispatchers.Main) {
-                            ConfigurationPreferences.setUsingRoot(false)
-                            rootSwitchView.setChecked(false)
-                        }
-                    }
-                }
-            } else {
-                ConfigurationPreferences.setUsingRoot(false)
-                rootSwitchView.setChecked(false)
-            }
-        }
-
-        shizukuSwitchView.setOnSwitchCheckedChangeListener { it ->
-            if (it) {
-                requestPermissionLauncher.launch(arrayOf(ShizukuProvider.PERMISSION))
-            } else {
-                ConfigurationPreferences.setUsingShizuku(false)
-            }
+            openFragmentSlide(AppearanceTypeFace.newInstance(), AppearanceTypeFace.TAG)
         }
 
         dontShowAgainCheckBox.setOnCheckedChangeListener {
             SetupPreferences.setDontShowAgain(it)
+        }
+
+        dontShowAgain.setOnClickListener {
+            dontShowAgainCheckBox.toggle(true)
         }
     }
 
@@ -258,6 +208,14 @@ class Setup : ScopedFragment() {
         }
     }
 
+    private fun isShizukuPermissionGranted(): Boolean {
+        return if (Shizuku.isPreV11() || Shizuku.getVersion() < 11) {
+            false
+        } else {
+            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     private fun checkStoragePermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Environment.isExternalStorageManager()
@@ -275,5 +233,7 @@ class Setup : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        private const val TAG = "Setup"
     }
 }

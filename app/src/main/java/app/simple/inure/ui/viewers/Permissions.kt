@@ -10,21 +10,22 @@ import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterPermissions
+import app.simple.inure.adapters.viewers.AdapterPermissions
 import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.decorations.ripple.DynamicRippleImageButton
 import app.simple.inure.dialogs.action.PermissionStatus
 import app.simple.inure.dialogs.action.PermissionStatus.Companion.showPermissionStatus
-import app.simple.inure.dialogs.menus.PermissionsMenu
+import app.simple.inure.dialogs.permissions.PermissionsMenu
 import app.simple.inure.extensions.fragments.SearchBarScopedFragment
 import app.simple.inure.factories.panels.PackageInfoFactory
+import app.simple.inure.helpers.ShizukuServiceHelper
 import app.simple.inure.models.PermissionInfo
 import app.simple.inure.preferences.ConfigurationPreferences
 import app.simple.inure.preferences.PermissionPreferences
-import app.simple.inure.shizuku.ShizukuUtils
 import app.simple.inure.viewmodels.viewers.PermissionsViewModel
+import com.anggrayudi.storage.extension.postToUi
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,7 +66,7 @@ class Permissions : SearchBarScopedFragment() {
 
         permissionsViewModel.getPermissions().observe(viewLifecycleOwner) { permissionInfos ->
             adapterPermissions = AdapterPermissions(permissionInfos, searchBox.text.toString().trim(), isPackageInstalled)
-            recyclerView.adapter = adapterPermissions
+            setCount(permissionInfos.size)
 
             adapterPermissions.setOnPermissionCallbacksListener(object : AdapterPermissions.Companion.PermissionCallbacks {
                 override fun onPermissionClicked(container: View, permissionInfo: PermissionInfo, position: Int) {
@@ -104,27 +105,26 @@ class Permissions : SearchBarScopedFragment() {
                         } else if (ConfigurationPreferences.isUsingShizuku()) {
                             kotlin.runCatching {
                                 if (Shizuku.pingBinder()) {
-                                    ShizukuUtils.execInternal(app.simple.inure.shizuku.Shell.Command(
-                                            "pm $mode ${packageInfo.packageName} ${permissionInfo.name}"), null).let {
-                                        if (it.isSuccessful) {
-                                            withContext(Dispatchers.Main) {
-                                                adapterPermissions.permissionStatusChanged(position, if (permissionInfo.isGranted == 1) 0 else 1)
-                                            }
-                                        } else {
-                                            withContext(Dispatchers.Main) {
-                                                showWarning("ERR: failed to $mode permission", goBack = false)
-                                                adapterPermissions.permissionStatusChanged(position, permissionInfo.isGranted)
+                                    ShizukuServiceHelper.getInstance().getBoundService { shizukuService ->
+                                        shizukuService.simpleExecute("pm $mode ${packageInfo.packageName} ${permissionInfo.name}").let {
+                                            postToUi {
+                                                if (it.isSuccess) {
+                                                    adapterPermissions.permissionStatusChanged(position, if (permissionInfo.isGranted == 1) 0 else 1)
+                                                } else {
+                                                    showWarning("ERR: failed to $mode permission", goBack = false)
+                                                    adapterPermissions.permissionStatusChanged(position, permissionInfo.isGranted)
+                                                }
                                             }
                                         }
                                     }
                                 } else {
-                                    withContext(Dispatchers.Main) {
+                                    postToUi {
                                         showWarning("ERR: failed to acquire Shizuku", goBack = false)
                                         adapterPermissions.permissionStatusChanged(position, permissionInfo.isGranted)
                                     }
                                 }
                             }.getOrElse {
-                                withContext(Dispatchers.Main) {
+                                postToUi {
                                     showWarning("ERR: failed to acquire Shizuku", goBack = false)
                                     adapterPermissions.permissionStatusChanged(position, permissionInfo.isGranted)
                                 }
@@ -134,11 +134,7 @@ class Permissions : SearchBarScopedFragment() {
                 }
             })
 
-            searchBox.doOnTextChanged { text, _, _, _ ->
-                if (searchBox.isFocused) {
-                    permissionsViewModel.loadPermissionData(text.toString().trim())
-                }
-            }
+            recyclerView.setExclusiveAdapter(adapterPermissions)
         }
 
         permissionsViewModel.getError().observe(viewLifecycleOwner) {
@@ -149,9 +145,15 @@ class Permissions : SearchBarScopedFragment() {
             showWarning(it)
         }
 
+        searchBox.doOnTextChanged { text, _, _, _ ->
+            if (searchBox.isFocused) {
+                permissionsViewModel.loadPermissionData(text.toString().trim())
+            }
+        }
+
         options.setOnClickListener {
             PermissionsMenu.newInstance()
-                .show(childFragmentManager, "permission_menu")
+                .show(childFragmentManager, PermissionsMenu.TAG)
         }
 
         search.setOnClickListener {
@@ -165,11 +167,11 @@ class Permissions : SearchBarScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            PermissionPreferences.permissionSearch -> {
+            PermissionPreferences.PERMISSION_SEARCH -> {
                 searchBoxState(true, PermissionPreferences.isSearchVisible())
             }
 
-            PermissionPreferences.labelType -> {
+            PermissionPreferences.LABEL_TYPE -> {
                 adapterPermissions.update()
             }
         }
@@ -184,5 +186,7 @@ class Permissions : SearchBarScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "permissions"
     }
 }

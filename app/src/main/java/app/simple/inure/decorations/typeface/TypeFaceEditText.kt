@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.os.Build
 import android.util.AttributeSet
 import android.view.animation.DecelerateInterpolator
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
 import androidx.annotation.ColorInt
@@ -54,6 +55,7 @@ open class TypeFaceEditText : AppCompatEditText, ThemeChangedListener {
         if (isInEditMode.invert()) {
             typeface = TypeFace.getTypeFace(AppearancePreferences.getAppFont(), typedArray.getInt(R.styleable.TypeFaceTextView_appFontStyle, -1), context)
             colorMode = typedArray.getInt(R.styleable.TypeFaceTextView_textColorStyle, 1)
+            imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
             setHighlightColor()
             setTextColor(colorMode, false)
             setHintTextColor(ThemeManager.theme.textViewTheme.tertiaryTextColor)
@@ -155,7 +157,9 @@ open class TypeFaceEditText : AppCompatEditText, ThemeChangedListener {
         val valueAnimator = ValueAnimator.ofArgb(backgroundTintList!!.defaultColor, endColor)
         valueAnimator.duration = resources.getInteger(R.integer.theme_change_duration).toLong()
         valueAnimator.interpolator = DecelerateInterpolator()
-        valueAnimator.addUpdateListener { animation: ValueAnimator -> backgroundTintList = ColorStateList.valueOf(animation.animatedValue as Int) }
+        valueAnimator.addUpdateListener { animation: ValueAnimator ->
+            backgroundTintList = ColorStateList.valueOf(animation.animatedValue as Int)
+        }
         valueAnimator.start()
         return valueAnimator
     }
@@ -169,7 +173,7 @@ open class TypeFaceEditText : AppCompatEditText, ThemeChangedListener {
     open fun hideInput() {
         clearFocus()
         (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-            .hideSoftInputFromWindow(windowToken, InputMethodManager.RESULT_UNCHANGED_SHOWN)
+            .hideSoftInputFromWindow(windowToken, InputMethodManager.HIDE_NOT_ALWAYS)
     }
 
     @Suppress("unused")

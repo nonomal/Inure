@@ -4,10 +4,10 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.RootShizukuViewModel
+import app.simple.inure.helpers.ShizukuServiceHelper
 import app.simple.inure.models.BatchPackageInfo
-import app.simple.inure.shizuku.Shell.Command
-import app.simple.inure.shizuku.ShizukuUtils
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,26 +29,22 @@ class BatchStateViewModel(application: Application, val list: ArrayList<BatchPac
         runRootCommand()
     }
 
-    override fun onShizukuCreated() {
-        super.onShizukuCreated()
-        runShizukuCommand()
-    }
-
-    private fun runShizukuCommand() {
+    override fun onShizukuCreated(shizukuServiceHelper: ShizukuServiceHelper) {
+        super.onShizukuCreated(shizukuServiceHelper)
         viewModelScope.launch(Dispatchers.IO) {
             val stateCommand = if (state) "enable" else "disable"
 
             for (app in list) {
-                ShizukuUtils.execInternal(Command("pm $stateCommand ${app.packageInfo.packageName}"), null).let {
-                    if (it.isSuccessful) {
-                        app.packageInfo.applicationInfo.enabled = state
+                shizukuServiceHelper.service!!.simpleExecute("pm $stateCommand ${app.packageInfo.packageName}").let {
+                    if (it!!.isSuccess) {
+                        app.packageInfo.safeApplicationInfo.enabled = state
                     } else {
                         Log.e("BatchStateViewModel", "Failed to $stateCommand ${app.packageInfo.packageName}")
                     }
                 }
             }
 
-            success.postValue(list.count { it.packageInfo.applicationInfo.enabled == state })
+            success.postValue(list.count { it.packageInfo.safeApplicationInfo.enabled == state })
         }
     }
 
@@ -59,14 +55,14 @@ class BatchStateViewModel(application: Application, val list: ArrayList<BatchPac
             for (app in list) {
                 Shell.cmd("pm $stateCommand ${app.packageInfo.packageName}").exec().let {
                     if (it.isSuccess) {
-                        app.packageInfo.applicationInfo.enabled = state
+                        app.packageInfo.safeApplicationInfo.enabled = state
                     } else {
                         Log.e("BatchStateViewModel", "Failed to $stateCommand ${app.packageInfo.packageName}")
                     }
                 }
             }
 
-            success.postValue(list.count { it.packageInfo.applicationInfo.enabled == state })
+            success.postValue(list.count { it.packageInfo.safeApplicationInfo.enabled == state })
         }
     }
 

@@ -30,7 +30,8 @@ public class Utils {
                 endColor);
         valueAnimator.setDuration(300L);
         valueAnimator.setInterpolator(new DecelerateInterpolator(1.5F));
-        valueAnimator.addUpdateListener(animation -> view.setBackgroundTintList(ColorStateList.valueOf((int) animation.getAnimatedValue())));
+        valueAnimator.addUpdateListener(animation ->
+                view.setBackgroundTintList(ColorStateList.valueOf((int) animation.getAnimatedValue())));
         valueAnimator.start();
     }
     
@@ -41,7 +42,9 @@ public class Utils {
                 endColor);
         valueAnimator.setDuration(300L);
         valueAnimator.setInterpolator(new DecelerateInterpolator(1.5F));
-        valueAnimator.addUpdateListener(animation -> view.setBackgroundTintList(ColorStateList.valueOf((int) animation.getAnimatedValue())));
+        valueAnimator.addUpdateListener(animation ->
+                view.setBackgroundTintList(ColorStateList.valueOf((int) animation.getAnimatedValue())));
+    
         valueAnimator.start();
     }
     
@@ -84,6 +87,23 @@ public class Utils {
         float[] innerRadii = new float[8];
         Arrays.fill(outerRadii, AppearancePreferences.INSTANCE.getCornerRadius());
         Arrays.fill(innerRadii, AppearancePreferences.INSTANCE.getCornerRadius());
+        
+        RoundRectShape shape = new RoundRectShape(outerRadii, null, innerRadii);
+        ShapeDrawable mask = new ShapeDrawable(shape);
+        
+        ColorStateList stateList = ColorStateList.valueOf(color);
+        
+        RippleDrawable rippleDrawable = new RippleDrawable(stateList, backgroundDrawable, mask);
+        rippleDrawable.setAlpha(alpha);
+        
+        return rippleDrawable;
+    }
+    
+    public static RippleDrawable getCustomRippleDrawable(Drawable backgroundDrawable, int color, float divisiveFactor) {
+        float[] outerRadii = new float[8];
+        float[] innerRadii = new float[8];
+        Arrays.fill(outerRadii, AppearancePreferences.INSTANCE.getCornerRadius() / divisiveFactor);
+        Arrays.fill(innerRadii, AppearancePreferences.INSTANCE.getCornerRadius() / divisiveFactor);
         
         RoundRectShape shape = new RoundRectShape(outerRadii, null, innerRadii);
         ShapeDrawable mask = new ShapeDrawable(shape);

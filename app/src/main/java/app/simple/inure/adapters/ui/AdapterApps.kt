@@ -1,42 +1,43 @@
 package app.simple.inure.adapters.ui
 
 import android.annotation.SuppressLint
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import app.simple.inure.R
-import app.simple.inure.apk.parsers.FOSSParser
+import app.simple.inure.apk.utils.PackageUtils.isAppStopped
+import app.simple.inure.apk.utils.PackageUtils.isInstalled
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.SortConstant
+import app.simple.inure.decorations.condensed.CondensedDynamicRippleConstraintLayout
 import app.simple.inure.decorations.fastscroll.PopupTextProvider
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
-import app.simple.inure.decorations.ripple.DynamicRippleConstraintLayout
 import app.simple.inure.decorations.typeface.TypeFaceTextView
 import app.simple.inure.decorations.views.AppIconImageView
 import app.simple.inure.glide.modules.GlideApp
 import app.simple.inure.glide.util.ImageLoader.loadAppIcon
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
 import app.simple.inure.preferences.AppsPreferences
+import app.simple.inure.util.AdapterUtils.setAppVisualStates
 import app.simple.inure.util.ConditionUtils.invert
-import app.simple.inure.util.FileUtils.toFile
-import app.simple.inure.util.LocaleHelper
-import app.simple.inure.util.PackageListUtils.setAppInfo
+import app.simple.inure.util.FileUtils.toFileOrNull
+import app.simple.inure.util.InfoStripUtils.setAppInfo
+import app.simple.inure.util.LocaleUtils
 import app.simple.inure.util.RecyclerViewUtils
 import app.simple.inure.util.Sort
 import app.simple.inure.util.StatusBarHeight
-import java.util.*
+import java.util.Locale
 
-class AdapterApps : RecyclerView.Adapter<VerticalListViewHolder>(), PopupTextProvider {
+class AdapterApps(private val apps: ArrayList<PackageInfo>) : RecyclerView.Adapter<VerticalListViewHolder>(), PopupTextProvider {
 
-    var apps = arrayListOf<PackageInfo>()
     private lateinit var adapterCallbacks: AdapterCallbacks
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VerticalListViewHolder {
         return when (viewType) {
             RecyclerViewUtils.TYPE_HEADER -> {
-                if (LocaleHelper.isAppRussianLocale() && StatusBarHeight.isLandscape(parent.context).invert()) {
+                if (LocaleUtils.isAppRussianLocale() && StatusBarHeight.isLandscape(parent.context).invert()) {
                     Header(LayoutInflater.from(parent.context)
                                .inflate(R.layout.adapter_header_all_apps_ru, parent, false))
                 } else {
@@ -55,23 +56,25 @@ class AdapterApps : RecyclerView.Adapter<VerticalListViewHolder>(), PopupTextPro
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    override fun onBindViewHolder(holder: VerticalListViewHolder, position_: Int) {
-        val position = position_ - 1
+    override fun onBindViewHolder(holder: VerticalListViewHolder, holderPosition: Int) {
+        val position = holderPosition - 1
         if (holder is Holder) {
 
             holder.icon.transitionName = apps[position].packageName
-            holder.name.text = apps[position].applicationInfo.name
+            holder.name.text = apps[position].safeApplicationInfo.name
             holder.packageId.text = apps[position].packageName
 
-            if (apps[position].applicationInfo.flags and ApplicationInfo.FLAG_INSTALLED == 0) {
-                holder.icon.loadAppIcon(apps[position].packageName, false, apps[position].applicationInfo.sourceDir.toFile())
+            if (apps[position].isInstalled()) {
+                holder.icon.loadAppIcon(
+                        apps[position].packageName,
+                        apps[position].safeApplicationInfo.enabled || apps[position].isAppStopped())
             } else {
-                holder.icon.loadAppIcon(apps[position].packageName, apps[position].applicationInfo.enabled)
+                holder.icon.loadAppIcon(
+                        apps[position].packageName, false,
+                        apps[position].safeApplicationInfo.sourceDir.toFileOrNull())
             }
 
-            holder.name.setStrikeThru(apps[position].applicationInfo.enabled)
-            holder.name.setFOSSIcon(FOSSParser.isPackageFOSS(apps[position].packageName))
-
+            holder.name.setAppVisualStates(apps[position])
             holder.info.setAppInfo(apps[position])
 
             holder.container.setOnClickListener {
@@ -165,7 +168,7 @@ class AdapterApps : RecyclerView.Adapter<VerticalListViewHolder>(), PopupTextPro
         val name: TypeFaceTextView = itemView.findViewById(R.id.name)
         val packageId: TypeFaceTextView = itemView.findViewById(R.id.package_id)
         val info: TypeFaceTextView = itemView.findViewById(R.id.details)
-        val container: DynamicRippleConstraintLayout = itemView.findViewById(R.id.container)
+        val container: CondensedDynamicRippleConstraintLayout = itemView.findViewById(R.id.container)
     }
 
     inner class Header(itemView: View) : VerticalListViewHolder(itemView) {
@@ -175,6 +178,6 @@ class AdapterApps : RecyclerView.Adapter<VerticalListViewHolder>(), PopupTextPro
     }
 
     override fun getPopupText(position: Int): String {
-        return apps[position].applicationInfo.name.substring(0, 1).uppercase(Locale.ROOT)
+        return apps[position].safeApplicationInfo.name.substring(0, 1).uppercase(Locale.ROOT)
     }
 }

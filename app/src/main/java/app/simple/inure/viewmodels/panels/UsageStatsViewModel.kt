@@ -9,7 +9,9 @@ import androidx.collection.SparseArrayCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.apk.utils.PackageUtils.getPackageSize
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.constants.SortConstant
+import app.simple.inure.constants.Warnings
 import app.simple.inure.models.DataUsage
 import app.simple.inure.models.PackageStats
 import app.simple.inure.popups.usagestats.PopupUsageStatsEngine
@@ -20,8 +22,9 @@ import app.simple.inure.util.UsageInterval
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.stream.Collectors
+import app.simple.inure.extensions.viewmodels.UsageStatsViewModel as MainUsageStatsViewModel
 
-class UsageStatsViewModel(application: Application) : app.simple.inure.extensions.viewmodels.UsageStatsViewModel(application) {
+class UsageStatsViewModel(application: Application) : MainUsageStatsViewModel(application) {
 
     val usageData: MutableLiveData<ArrayList<PackageStats>> by lazy {
         MutableLiveData<ArrayList<PackageStats>>()
@@ -30,48 +33,57 @@ class UsageStatsViewModel(application: Application) : app.simple.inure.extension
     val progress = MutableLiveData<Int>()
     val max = MutableLiveData<Int>()
 
+    fun shouldShowLoader(): Boolean {
+        return usageData.value.isNullOrEmpty()
+    }
+
     fun loadAppStats() {
         viewModelScope.launch(Dispatchers.Default) {
-            var list = when (StatisticsPreferences.getEngine()) {
-                PopupUsageStatsEngine.INURE -> {
-                    getUsageStats()
+            try {
+                var list = when (StatisticsPreferences.getEngine()) {
+                    PopupUsageStatsEngine.INURE -> {
+                        getUsageStats()
+                    }
+                    PopupUsageStatsEngine.ANDROID -> {
+                        getUsageEvents()
+                    }
+                    else -> {
+                        StatisticsPreferences.setEngine(PopupUsageStatsEngine.INURE)
+                        throw java.lang.IllegalStateException("Unknown engine type detected by Inure" +
+                                                                      " - app will reset engine preferences")
+                    }
                 }
-                PopupUsageStatsEngine.ANDROID -> {
-                    getUsageEvents()
+
+                when (StatisticsPreferences.getAppsCategory()) {
+                    SortConstant.SYSTEM -> {
+                        list = list.stream().filter { p ->
+                            p.packageInfo!!.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
+                        }.collect(Collectors.toList()) as ArrayList<PackageStats>
+                    }
+                    SortConstant.USER -> {
+                        list = list.stream().filter { p ->
+                            p.packageInfo!!.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
+                        }.collect(Collectors.toList()) as ArrayList<PackageStats>
+                    }
                 }
-                else -> {
-                    StatisticsPreferences.setEngine(PopupUsageStatsEngine.INURE)
-                    throw java.lang.IllegalStateException("Unknown engine type detected by Inure" +
-                                                                  " - app will reset engine preferences")
+
+                for (app in list) {
+                    app.packageInfo!!.safeApplicationInfo.name =
+                        getApplicationName(applicationContext(), app.packageInfo!!.safeApplicationInfo)
                 }
+
+                if (StatisticsPreferences.areUnusedAppHidden()) {
+                    list = list.filter {
+                        it.totalTimeUsed != 0L
+                    } as ArrayList<PackageStats>
+                }
+
+                list.sortStats()
+                usageData.postValue(list)
+            } catch (e: SecurityException) {
+                postWarning(Warnings.USAGE_STATS_ACCESS_BLOCKED)
+                usageData.postValue(arrayListOf())
             }
-
-            when (StatisticsPreferences.getAppsCategory()) {
-                SortConstant.SYSTEM -> {
-                    list = list.stream().filter { p ->
-                        p.packageInfo!!.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
-                    }.collect(Collectors.toList()) as ArrayList<PackageStats>
-                }
-                SortConstant.USER -> {
-                    list = list.stream().filter { p ->
-                        p.packageInfo!!.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
-                    }.collect(Collectors.toList()) as ArrayList<PackageStats>
-                }
-            }
-
-            for (app in list) {
-                app.packageInfo!!.applicationInfo.name = getApplicationName(applicationContext(), app.packageInfo!!.applicationInfo)
-            }
-
-            if (StatisticsPreferences.areUnusedAppHidden()) {
-                list = list.filter {
-                    it.totalTimeUsed != 0L
-                } as ArrayList<PackageStats>
-            }
-
-            list.sortStats()
-
-            usageData.postValue(list)
         }
     }
 
@@ -96,12 +108,12 @@ class UsageStatsViewModel(application: Application) : app.simple.inure.extension
         when (StatisticsPreferences.getAppsCategory()) {
             SortConstant.SYSTEM -> {
                 apps = apps.stream().filter { p ->
-                    p.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
+                    p.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
                 }.collect(Collectors.toList()) as ArrayList<PackageInfo>
             }
             SortConstant.USER -> {
                 apps = apps.stream().filter { p ->
-                    p.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
+                    p.safeApplicationInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0
                 }.collect(Collectors.toList()) as ArrayList<PackageInfo>
             }
         }
@@ -130,19 +142,28 @@ class UsageStatsViewModel(application: Application) : app.simple.inure.extension
                     packageStats.totalTimeUsed += usageStats.totalTimeInForeground
                 }
 
-                val uid: Int = packageStats.packageInfo?.applicationInfo?.uid!!
+                val uid: Int = packageStats.packageInfo?.safeApplicationInfo?.uid!!
 
-                if (mobileData.containsKey(uid)) {
-                    packageStats.mobileData = mobileData[uid]
-                } else packageStats.mobileData = DataUsage.EMPTY
-                if (wifiData.containsKey(uid)) {
-                    packageStats.wifiData = wifiData[uid]
-                } else packageStats.wifiData = DataUsage.EMPTY
+                when {
+                    mobileData.containsKey(uid) -> {
+                        packageStats.mobileData = mobileData[uid]
+                    }
+                    else -> {
+                        packageStats.mobileData = DataUsage.EMPTY
+                    }
+                }
+
+                when {
+                    wifiData.containsKey(uid) -> {
+                        packageStats.wifiData = wifiData[uid]
+                    }
+                    else -> {
+                        packageStats.wifiData = DataUsage.EMPTY
+                    }
+                }
 
                 packageStats.appSize = getCacheSize(app)
-
                 list.add(packageStats)
-
                 progress.postValue(list.size)
             }.getOrElse {
                 it.printStackTrace()
@@ -230,7 +251,7 @@ class UsageStatsViewModel(application: Application) : app.simple.inure.extension
             packageStats.lastUsageTime = lastUse[packageName] ?: 0
             packageStats.totalTimeUsed = screenTimes[packageName] ?: 0
 
-            val uid: Int = packageStats.packageInfo?.applicationInfo?.uid!!
+            val uid: Int = packageStats.packageInfo?.safeApplicationInfo?.uid!!
 
             if (mobileData.containsKey(uid)) {
                 packageStats.mobileData = mobileData[uid]
@@ -252,7 +273,7 @@ class UsageStatsViewModel(application: Application) : app.simple.inure.extension
     }
 
     private fun getCacheSize(packageInfo: PackageInfo): Long {
-        with(packageInfo.getPackageSize(application)) {
+        with(packageInfo.getPackageSize(applicationContext())) {
             return cacheSize +
                     externalCacheSize +
                     dataSize +
@@ -260,7 +281,7 @@ class UsageStatsViewModel(application: Application) : app.simple.inure.extension
                     codeSize +
                     externalCodeSize +
                     externalObbSize +
-                    packageInfo.applicationInfo.sourceDir.toLength()
+                    packageInfo.safeApplicationInfo.sourceDir.toLength()
         }
     }
 

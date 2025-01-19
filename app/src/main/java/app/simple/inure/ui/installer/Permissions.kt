@@ -8,27 +8,25 @@ import android.view.ViewGroup
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterPermissions
+import app.simple.inure.adapters.viewers.AdapterPermissions
 import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.dialogs.action.PermissionStatus
 import app.simple.inure.dialogs.action.PermissionStatus.Companion.showPermissionStatus
-import app.simple.inure.extensions.fragments.ScopedFragment
+import app.simple.inure.extensions.fragments.InstallerLoaderScopedFragment
 import app.simple.inure.factories.installer.InstallerViewModelFactory
-import app.simple.inure.interfaces.fragments.InstallerCallbacks
+import app.simple.inure.helpers.ShizukuServiceHelper
 import app.simple.inure.models.PermissionInfo
 import app.simple.inure.preferences.ConfigurationPreferences
-import app.simple.inure.shizuku.Shell.Command
-import app.simple.inure.shizuku.ShizukuUtils
 import app.simple.inure.viewmodels.installer.InstallerPermissionViewModel
+import com.anggrayudi.storage.extension.postToUi
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 
-class Permissions : ScopedFragment() {
+class Permissions : InstallerLoaderScopedFragment() {
 
     private lateinit var recyclerView: CustomVerticalRecyclerView
 
@@ -40,7 +38,7 @@ class Permissions : ScopedFragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = inflater.inflate(R.layout.installer_fragment_permissions, container, false)
 
-        recyclerView = view.findViewById(R.id.permissions_recycler_view)
+        recyclerView = view.findViewById(R.id.recycler_view)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             file = requireArguments().getSerializable(BundleConstants.file, File::class.java)
@@ -57,8 +55,6 @@ class Permissions : ScopedFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        startPostponedEnterTransition()
-        (parentFragment as InstallerCallbacks).onLoadingStarted()
 
         //        installerPermissionViewModel.getPermissionsFile().observe(viewLifecycleOwner) { permissions ->
         //            // (parentFragment as InstallerCallbacks).onLoadingFinished()
@@ -66,7 +62,7 @@ class Permissions : ScopedFragment() {
         //        }
 
         installerPermissionViewModel.getPermissionsInfo().observe(viewLifecycleOwner) { it ->
-            (parentFragment as InstallerCallbacks).onLoadingFinished()
+            onLoadingFinished()
             packageInfo = it.second
             isPackageInstalled = requirePackageManager().isPackageInstalled(packageInfo.packageName)
             val adapterPermissions = AdapterPermissions(it.first, "", isPackageInstalled)
@@ -87,36 +83,35 @@ class Permissions : ScopedFragment() {
                         if (ConfigurationPreferences.isUsingRoot()) {
                             kotlin.runCatching {
                                 Shell.cmd("pm $mode ${packageInfo.packageName} ${permissionInfo.name}").exec().let {
-                                    if (it.isSuccess) {
-                                        withContext(Dispatchers.Main) {
+                                    postToUi {
+                                        if (it.isSuccess) {
                                             adapterPermissions.permissionStatusChanged(position, if (permissionInfo.isGranted == 1) 0 else 1)
-                                        }
-                                    } else {
-                                        withContext(Dispatchers.Main) {
+                                        } else {
                                             showWarning("ERR: failed to $mode permission", goBack = false)
                                         }
                                     }
                                 }
                             }.getOrElse {
-                                withContext(Dispatchers.Main) {
+                                postToUi {
                                     showWarning("ERR: failed to acquire root", goBack = false)
                                 }
                             }
                         } else if (ConfigurationPreferences.isUsingShizuku()) {
                             kotlin.runCatching {
-                                ShizukuUtils.execInternal(Command("pm $mode ${packageInfo.packageName} ${permissionInfo.name}"), null).let {
-                                    if (it.isSuccessful) {
-                                        withContext(Dispatchers.Main) {
-                                            adapterPermissions.permissionStatusChanged(position, if (permissionInfo.isGranted == 1) 0 else 1)
-                                        }
-                                    } else {
-                                        withContext(Dispatchers.Main) {
-                                            showWarning("ERR: failed to $mode permission", goBack = false)
+                                ShizukuServiceHelper.getInstance().getBoundService { shizukuService ->
+                                    shizukuService.simpleExecute("pm $mode ${packageInfo.packageName} ${permissionInfo.name}").let {
+                                        postToUi {
+                                            if (it.isSuccess) {
+                                                adapterPermissions.permissionStatusChanged(position, if (permissionInfo.isGranted == 1) 0 else 1)
+                                            } else {
+                                                showWarning("ERR: failed to $mode permission", goBack = false)
+                                                adapterPermissions.permissionStatusChanged(position, permissionInfo.isGranted)
+                                            }
                                         }
                                     }
                                 }
                             }.getOrElse {
-                                withContext(Dispatchers.Main) {
+                                postToUi {
                                     showWarning("ERR: failed to acquire Shizuku", goBack = false)
                                 }
                             }
@@ -134,6 +129,14 @@ class Permissions : ScopedFragment() {
         if (packageInstalled) {
             installerPermissionViewModel.loadPermissionData()
         }
+    }
+
+    override fun setupBackPressedDispatcher() {
+        /* no-op */
+    }
+
+    override fun setupBackPressedCallback(view: ViewGroup) {
+        /* no-op */
     }
 
     companion object {

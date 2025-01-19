@@ -47,7 +47,7 @@ class AdapterHome(private val list: List<Pair<Int, Int>>) : RecyclerView.Adapter
                             .inflate(R.layout.adapter_divider_preferences, parent, false))
             }
             RecyclerViewUtils.TYPE_HEADER -> {
-                if (DevelopmentPreferences.get(DevelopmentPreferences.expandHomeHeader)) {
+                if (DevelopmentPreferences.get(DevelopmentPreferences.EXPAND_HOME_HEADER)) {
                     Header(LayoutInflater.from(parent.context)
                                .inflate(R.layout.adapter_header_home_expanded, parent, false))
                 } else {
@@ -74,6 +74,10 @@ class AdapterHome(private val list: List<Pair<Int, Int>>) : RecyclerView.Adapter
                         Colors.getColors()[position],
                         Colors.getColors()[position]
                 ))
+
+                if (AccessibilityPreferences.isHighlightMode()) {
+                    holder.container.setHighlightColor(Colors.getColors()[position])
+                }
             }
 
             holder.container.setOnClickListener {
@@ -99,7 +103,7 @@ class AdapterHome(private val list: List<Pair<Int, Int>>) : RecyclerView.Adapter
             }
 
             holder.settings.setOnClickListener {
-                adapterHomeMenuCallbacks.onMenuItemClicked(R.string.preferences, holder.settings)
+                adapterHomeMenuCallbacks.onMenuItemClicked(R.string.menus, holder.settings)
             }
         }
     }

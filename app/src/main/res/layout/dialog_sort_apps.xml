@@ -239,6 +239,34 @@
             app:appFontStyle="bold"
             app:textColorStyle="primary" />
 
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/logical_operator_group"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <app.simple.inure.decorations.views.Button
+                android:id="@+id/and"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:padding="3dp"
+                android:text="@string/and" />
+
+            <app.simple.inure.decorations.views.Button
+                android:id="@+id/or"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:padding="3dp"
+                android:text="@string/or" />
+
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/filter_chip_group"
             android:layout_width="match_parent"
@@ -279,12 +307,29 @@
                 android:text="@string/split_packages" />
 
             <app.simple.inure.decorations.views.Chip
-                android:id="@+id/combine_flags"
+                android:id="@+id/foss"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/combine_flags" />
+                android:text="@string/foss" />
+
+            <app.simple.inure.decorations.views.Chip
+                android:id="@+id/large_heap"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/large_heap" />
+
+            <app.simple.inure.decorations.views.Chip
+                android:id="@+id/launchable"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/launchable" />
+
+            <app.simple.inure.decorations.views.Chip
+                android:id="@+id/stopped"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/stopped" />
 
         </com.google.android.material.chip.ChipGroup>
-
     </app.simple.inure.decorations.corners.DynamicCornerLinearLayout>
 </FrameLayout>

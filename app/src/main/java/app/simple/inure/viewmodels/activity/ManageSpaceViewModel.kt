@@ -1,26 +1,19 @@
 package app.simple.inure.viewmodels.activity
 
 import android.app.Application
-import android.os.Build
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.extensions.viewmodels.WrappedViewModel
 import app.simple.inure.util.FileSizeHelper.getDirectorySize
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 
 class ManageSpaceViewModel(application: Application) : WrappedViewModel(application) {
 
-    private val trackersCachePath = "${applicationContext().cacheDir}/trackers_cache/"
     private val imagesCachePath = "${applicationContext().cacheDir}/image_manager_disk_cache/"
-
-    val trackersCacheSize: MutableLiveData<String> by lazy {
-        MutableLiveData<String>().also {
-            loadTrackersCacheSize()
-        }
-    }
+    private val appCachePath = "${applicationContext().cacheDir}/"
 
     val imagesCacheSize: MutableLiveData<String> by lazy {
         MutableLiveData<String>().also {
@@ -28,27 +21,38 @@ class ManageSpaceViewModel(application: Application) : WrappedViewModel(applicat
         }
     }
 
-    fun clearTrackersData() {
-        viewModelScope.launch(Dispatchers.IO) {
-            kotlin.runCatching {
-                delay(1000L)
-                val file = File(trackersCachePath)
-                if (file.deleteRecursively()) {
-                    loadTrackersCacheSize()
-                }
-            }.onFailure {
-                it.printStackTrace()
-                postError(it)
-            }
+    private val appCacheSize: MutableLiveData<String> by lazy {
+        MutableLiveData<String>().also {
+            loadAppCacheSize()
         }
     }
 
-    fun clearImagesData() {
+    fun getImagesCacheSize(): LiveData<String> {
+        return imagesCacheSize
+    }
+
+    fun getAppCacheSize(): LiveData<String> {
+        return appCacheSize
+    }
+
+    private fun loadImagesCacheSize() {
+        viewModelScope.launch(Dispatchers.IO) {
+            imagesCacheSize.postValue(imagesCachePath.getDirectorySize())
+        }
+    }
+
+    private fun loadAppCacheSize() {
+        viewModelScope.launch(Dispatchers.IO) {
+            appCacheSize.postValue(appCachePath.getDirectorySize())
+        }
+    }
+
+    fun clearCache() {
         viewModelScope.launch(Dispatchers.IO) {
             kotlin.runCatching {
-                delay(1000L)
-                val file = File(imagesCachePath)
+                val file = File(appCachePath)
                 if (file.deleteRecursively()) {
+                    loadAppCacheSize()
                     loadImagesCacheSize()
                 }
             }.onFailure {
@@ -57,18 +61,16 @@ class ManageSpaceViewModel(application: Application) : WrappedViewModel(applicat
         }
     }
 
-    private fun loadTrackersCacheSize() {
+    fun clearImagesData() {
         viewModelScope.launch(Dispatchers.IO) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                trackersCacheSize.postValue(trackersCachePath.getDirectorySize())
-            }
-        }
-    }
-
-    private fun loadImagesCacheSize() {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                imagesCacheSize.postValue(imagesCachePath.getDirectorySize())
+            kotlin.runCatching {
+                val file = File(imagesCachePath)
+                if (file.deleteRecursively()) {
+                    loadImagesCacheSize()
+                    loadAppCacheSize()
+                }
+            }.onFailure {
+                postError(it)
             }
         }
     }

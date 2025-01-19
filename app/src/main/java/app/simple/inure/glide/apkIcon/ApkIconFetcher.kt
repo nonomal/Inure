@@ -4,9 +4,10 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
-import app.simple.inure.R
 import app.simple.inure.apk.utils.PackageData.getCachedDir
 import app.simple.inure.apk.utils.PackageUtils
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
+import app.simple.inure.glide.util.GlideUtils.getGeneratedAppIconBitmap
 import app.simple.inure.preferences.ApkBrowserPreferences
 import app.simple.inure.util.BitmapHelper.toBitmap
 import com.bumptech.glide.Priority
@@ -36,9 +37,9 @@ class ApkIconFetcher internal constructor(private val apkIcon: ApkIcon) : DataFe
                             .getPackageArchiveInfo(apkIcon.file.path,
                                                    PackageManager.GET_META_DATA)
                     }
-                    p0!!.applicationInfo.sourceDir = apkIcon.file.path
-                    p0.applicationInfo.publicSourceDir = apkIcon.file.path
-                    val b = apkIcon.context.packageManager.getApplicationIcon(p0.applicationInfo)
+                    p0!!.safeApplicationInfo.sourceDir = apkIcon.file.path
+                    p0.safeApplicationInfo.publicSourceDir = apkIcon.file.path
+                    val b = apkIcon.context.packageManager.getApplicationIcon(p0.safeApplicationInfo)
                     callback.onDataReady(b.toBitmap())
                 } else {
                     if (ApkBrowserPreferences.isLoadSplitIcon()) {
@@ -58,9 +59,9 @@ class ApkIconFetcher internal constructor(private val apkIcon: ApkIcon) : DataFe
                             apkIcon.context.packageManager.getPackageArchiveInfo(apkFile?.absolutePath!!, PackageUtils.flags.toInt())!!
                         }
 
-                        packageInfo.applicationInfo.sourceDir = apkFile?.absolutePath
-                        packageInfo.applicationInfo.publicSourceDir = apkFile?.absolutePath
-                        val b = apkIcon.context.packageManager.getApplicationIcon(packageInfo.applicationInfo)
+                        packageInfo.safeApplicationInfo.sourceDir = apkFile?.absolutePath
+                        packageInfo.safeApplicationInfo.publicSourceDir = apkFile?.absolutePath
+                        val b = apkIcon.context.packageManager.getApplicationIcon(packageInfo.safeApplicationInfo)
                         callback.onDataReady(b.toBitmap())
                     } else {
                         throw Exception("Split icon loading is disabled")
@@ -74,7 +75,7 @@ class ApkIconFetcher internal constructor(private val apkIcon: ApkIcon) : DataFe
             }
         }.getOrElse {
             it.printStackTrace()
-            callback.onDataReady(R.drawable.ic_app_icon.toBitmap(apkIcon.context))
+            callback.onDataReady(apkIcon.context.getGeneratedAppIconBitmap())
         }
     }
 

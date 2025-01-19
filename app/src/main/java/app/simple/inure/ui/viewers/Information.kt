@@ -7,7 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.lifecycle.ViewModelProvider
 import app.simple.inure.R
-import app.simple.inure.adapters.details.AdapterInformation
+import app.simple.inure.adapters.viewers.AdapterInformation
 import app.simple.inure.constants.BundleConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.decorations.ripple.DynamicRippleImageButton
@@ -53,6 +53,10 @@ class Information : ScopedFragment() {
                 override fun onInformationClicked(view: View, string: String) {
                     PopupInformation(requireView(), string)
                 }
+
+                override fun onWarning(string: String) {
+                    showWarning(string)
+                }
             })
 
             recyclerView.adapter = adapterInformation
@@ -71,5 +75,7 @@ class Information : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "information"
     }
 }

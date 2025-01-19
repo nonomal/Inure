@@ -3,9 +3,6 @@ package app.simple.inure.glide.filedescriptorcover
 import android.content.res.AssetFileDescriptor
 import android.media.MediaMetadataRetriever
 import android.webkit.URLUtil
-import app.simple.inure.R
-import app.simple.inure.util.BitmapHelper.toBitmap
-import app.simple.inure.util.BitmapHelper.toInputStream
 import com.bumptech.glide.Priority
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.data.DataFetcher
@@ -15,15 +12,16 @@ import java.io.IOException
 import java.io.InputStream
 
 class DescriptorCoverFetcher(private val descriptorCoverModel: DescriptorCoverModel) : DataFetcher<InputStream> {
+
     override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in InputStream>) {
         val mediaMetadataRetriever = MediaMetadataRetriever()
         var file: AssetFileDescriptor? = null
 
         try {
             if (URLUtil.isValidUrl(descriptorCoverModel.fileUri.toString()) &&
-                (descriptorCoverModel.fileUri.toString().startsWith("http")
-                        || descriptorCoverModel.fileUri.toString().startsWith("https")
-                        || descriptorCoverModel.fileUri.toString().startsWith("ftp"))) {
+                    (descriptorCoverModel.fileUri.toString().startsWith("http")
+                            || descriptorCoverModel.fileUri.toString().startsWith("https")
+                            || descriptorCoverModel.fileUri.toString().startsWith("ftp"))) {
                 mediaMetadataRetriever.setDataSource(descriptorCoverModel.fileUri.toString(), hashMapOf())
             } else {
                 file = descriptorCoverModel.context.contentResolver.openAssetFileDescriptor(descriptorCoverModel.fileUri, "r")
@@ -31,13 +29,14 @@ class DescriptorCoverFetcher(private val descriptorCoverModel: DescriptorCoverMo
             }
 
             callback.onDataReady(ByteArrayInputStream(mediaMetadataRetriever.embeddedPicture))
-        } catch (_: IOException) {
-        } catch (_: FileNotFoundException) {
-        } catch (_: IllegalArgumentException) {
-        } catch (_: NullPointerException) {
-            R.drawable.ic_app_icon.toBitmap(descriptorCoverModel.context).toInputStream().use {
-                callback.onDataReady(it)
-            }
+        } catch (e: IOException) {
+            callback.onLoadFailed(e)
+        } catch (e: FileNotFoundException) {
+            callback.onLoadFailed(e)
+        } catch (e: IllegalArgumentException) {
+            callback.onLoadFailed(e)
+        } catch (e: NullPointerException) {
+            callback.onLoadFailed(e)
         } finally {
             mediaMetadataRetriever.release()
             mediaMetadataRetriever.close()

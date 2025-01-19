@@ -11,16 +11,20 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import app.simple.inure.R
-import app.simple.inure.apk.utils.PackageUtils.isPackageInstalled
-import app.simple.inure.constants.IntentConstants
 import app.simple.inure.constants.Misc
 import app.simple.inure.constants.ShortcutConstants
 import app.simple.inure.constants.ThemeConstants
 import app.simple.inure.constants.Warnings
-import app.simple.inure.crash.CrashReporter
+import app.simple.inure.crash.CrashReport
 import app.simple.inure.decorations.theme.ThemeCoordinatorLayout
+import app.simple.inure.dialogs.app.License.Companion.showLicense
+import app.simple.inure.dialogs.batch.BatchExtract.Companion.showBatchExtract
 import app.simple.inure.extensions.activities.BaseActivity
 import app.simple.inure.preferences.AppearancePreferences
 import app.simple.inure.preferences.ConfigurationPreferences
@@ -36,6 +40,7 @@ import app.simple.inure.ui.launcher.SplashScreen
 import app.simple.inure.ui.panels.Analytics
 import app.simple.inure.ui.panels.Apps
 import app.simple.inure.ui.panels.Batch
+import app.simple.inure.ui.panels.Debloat
 import app.simple.inure.ui.panels.DeviceInfo
 import app.simple.inure.ui.panels.FOSS
 import app.simple.inure.ui.panels.Home
@@ -50,13 +55,15 @@ import app.simple.inure.ui.panels.Statistics
 import app.simple.inure.ui.panels.Tags
 import app.simple.inure.ui.panels.Uninstalled
 import app.simple.inure.ui.subpanels.TaggedApps
-import app.simple.inure.ui.viewers.AudioPlayerPager
+import app.simple.inure.ui.viewers.AudioPlayer
 import app.simple.inure.util.ActivityUtils.getTopFragment
 import app.simple.inure.util.AppUtils
+import app.simple.inure.util.AppUtils.isNewerUnlocker
 import app.simple.inure.util.ConditionUtils.invert
-import app.simple.inure.util.Logger
 import app.simple.inure.util.NullSafety.isNull
+import app.simple.inure.viewmodels.launcher.LauncherViewModel
 import com.topjohnwu.superuser.ipc.RootService
+import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
 import java.util.Calendar
 import java.util.TimeZone
@@ -65,6 +72,8 @@ class MainActivity : BaseActivity() {
 
     private lateinit var container: ThemeCoordinatorLayout
     private lateinit var content: FrameLayout
+
+    private val launcherViewModel: LauncherViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,19 +87,46 @@ class MainActivity : BaseActivity() {
         content.setBackgroundColor(ThemeManager.theme.viewGroupTheme.background)
         ThemeUtils.setAppTheme(resources)
 
-        if (AppUtils.isBetaFlavor()) {
-            setExpiryStamp()
-        }
-
         if (savedInstanceState.isNull()) {
             MainPreferences.incrementLaunchCount()
             openPanel(intent, isNewIntent = false)
         } else {
             Log.d("MainActivity", "savedInstanceState not null")
         }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                launcherViewModel.initCheck()
+            }
+        }
+
+        launcherViewModel.getShouldVerify().observe(this@MainActivity) { it ->
+            if (it) {
+                if (applicationContext.isNewerUnlocker()) {
+                    supportFragmentManager.showLicense()
+                } else {
+                    if (TrialPreferences.isFullVersion().invert()) {
+                        kotlin.runCatching {
+                            if (TrialPreferences.setFullVersion(value = true)) {
+                                showWarning(R.string.full_version_activated, goBack = false)
+                            }
+                        }.getOrElse {
+                            it.printStackTrace()
+                        }
+                    }
+                }
+            } else {
+                Log.i("License", "Verification not required")
+            }
+        }
+
+        launcherViewModel.getWarning().observe(this@MainActivity) {
+            showWarning(Warnings.getInvalidUnlockerWarning(), goBack = false)
+            TrialPreferences.setFullVersion(false)
+        }
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openPanel(intent, isNewIntent = true)
     }
@@ -99,37 +135,37 @@ class MainActivity : BaseActivity() {
         when (intent?.action) {
             ShortcutConstants.ANALYTICS_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(Analytics.newInstance(), "analytics")
+                openFragment(Analytics.newInstance(), Analytics.TAG)
             }
 
             ShortcutConstants.APPS_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(Apps.newInstance(loading = true), "apps")
+                openFragment(Apps.newInstance(loading = true), Apps.TAG)
             }
 
             ShortcutConstants.BATCH_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(Batch.newInstance(loading = true), "batch")
+                openFragment(Batch.newInstance(loading = true), Batch.TAG)
             }
 
             ShortcutConstants.MOST_USED_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(MostUsed.newInstance(loader = true), "most_used")
+                openFragment(MostUsed.newInstance(loader = true), MostUsed.TAG)
             }
 
             ShortcutConstants.NOTES_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(Notes.newInstance(), "notes")
+                openFragment(Notes.newInstance(), Notes.TAG)
             }
 
             ShortcutConstants.RECENTLY_INSTALLED_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(RecentlyInstalled.newInstance(loading = true), "recently_installed")
+                openFragment(RecentlyInstalled.newInstance(loading = true), RecentlyInstalled.TAG)
             }
 
             ShortcutConstants.RECENTLY_UPDATED_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(RecentlyUpdated.newInstance(loading = true), "recently_updated")
+                openFragment(RecentlyUpdated.newInstance(loading = true), RecentlyUpdated.TAG)
             }
 
             ShortcutConstants.TERMINAL_ACTION -> {
@@ -140,27 +176,27 @@ class MainActivity : BaseActivity() {
 
             ShortcutConstants.UNINSTALLED_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(Uninstalled.newInstance(), "uninstalled")
+                openFragment(Uninstalled.newInstance(), Uninstalled.TAG)
             }
 
             ShortcutConstants.USAGE_STATS_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(Statistics.newInstance(loading = true), "statistics")
+                openFragment(Statistics.newInstance(loading = true), Statistics.TAG)
             }
 
             ShortcutConstants.PREFERENCES_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(Preferences.newInstance(), "preferences")
+                openFragment(Preferences.newInstance(), Preferences.TAG)
             }
 
             ShortcutConstants.SEARCH_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(Search.newInstance(firstLaunch = true), "search")
+                openFragment(Search.newInstance(firstLaunch = true), Search.TAG)
             }
 
             ShortcutConstants.TAGS_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(Tags.newInstance(), "tags")
+                openFragment(Tags.newInstance(), Tags.TAG)
             }
 
             ShortcutConstants.TAGGED_APPS_ACTION -> {
@@ -168,8 +204,8 @@ class MainActivity : BaseActivity() {
                 try {
                     supportFragmentManager.beginTransaction()
                         .replace(R.id.app_container, TaggedApps.newInstance(
-                                intent.getStringExtra(ShortcutConstants.TAGGED_APPS_EXTRA)!!), "tagged_apps")
-                        .addToBackStack("tagged_apps")
+                                intent.getStringExtra(ShortcutConstants.TAGGED_APPS_EXTRA)!!), TaggedApps.TAG)
+                        .addToBackStack(TaggedApps.TAG)
                         .commit()
                 } catch (e: NullPointerException) {
                     showWarning("ERR: invalid tag constraint definition found", goBack = true)
@@ -178,54 +214,32 @@ class MainActivity : BaseActivity() {
 
             ShortcutConstants.FOSS_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(FOSS.newInstance(), "foss")
+                openFragment(FOSS.newInstance(), FOSS.TAG)
+            }
+
+            ShortcutConstants.DEBLOAT_ACTION -> {
+                openHome(isNewIntent)
+                openFragment(Debloat.newInstance(), Debloat.TAG)
             }
 
             ShortcutConstants.MUSIC_ACTION -> {
                 openHome(isNewIntent)
-                openFragment(Music.newInstance(), "music")
+                openFragment(Music.newInstance(), Music.TAG)
             }
 
             ShortcutConstants.AUDIO_PLAYER_ACTION -> {
-                openFragment(AudioPlayerPager.newInstance(MusicPreferences.getMusicPosition()), "audio_player_pager")
+                openHome(isNewIntent)
+                openFragment(AudioPlayer.newInstance(MusicPreferences.getMusicPosition()), AudioPlayer.TAG)
             }
 
             "open_device_info" -> {
                 openHome(isNewIntent)
-                openFragment(DeviceInfo.newInstance(), "device_info")
+                openFragment(DeviceInfo.newInstance(), DeviceInfo.TAG)
             }
 
-            IntentConstants.ACTION_UNLOCK -> {
-                if (packageManager.isPackageInstalled(AppUtils.unlockerPackageName)) {
-                    if (TrialPreferences.isFullVersion()) {
-                        showWarning(R.string.full_version_already_activated, goBack = false)
-
-                        supportFragmentManager.beginTransaction()
-                            .replace(R.id.app_container, SplashScreen.newInstance(false), "splash_screen")
-                            .commit()
-                    } else {
-                        if (TrialPreferences.setFullVersion(value = true)) {
-                            showWarning(R.string.full_version_activated, goBack = false)
-                            TrialPreferences.resetUnlockerWarningCount()
-
-                            supportFragmentManager.beginTransaction()
-                                .replace(R.id.app_container, SplashScreen.newInstance(false), "splash_screen")
-                                .commit()
-                        } else {
-                            showWarning(R.string.failed_to_activate_full_version, goBack = false)
-
-                            supportFragmentManager.beginTransaction()
-                                .replace(R.id.app_container, SplashScreen.newInstance(false), "splash_screen")
-                                .commit()
-                        }
-                    }
-                } else {
-                    showWarning(Warnings.gtUnknownAppStateWarning(), goBack = false)
-
-                    supportFragmentManager.beginTransaction()
-                        .replace(R.id.app_container, SplashScreen.newInstance(false), "splash_screen")
-                        .commit()
-                }
+            ShortcutConstants.BATCH_EXTRACT_ACTION -> {
+                openHome(isNewIntent)
+                supportFragmentManager.showBatchExtract()
             }
 
             else -> {
@@ -236,11 +250,11 @@ class MainActivity : BaseActivity() {
                 if (isNewIntent.invert()) { // Maybe the app was opened from launcher, need more checks?
                     if (AppUtils.isDebug()) {
                         supportFragmentManager.beginTransaction()
-                            .replace(R.id.app_container, SplashScreen.newInstance(false), "splash_screen")
+                            .replace(R.id.app_container, SplashScreen.newInstance(false), SplashScreen.TAG)
                             .commit()
                     } else {
                         supportFragmentManager.beginTransaction()
-                            .replace(R.id.app_container, SplashScreen.newInstance(false), "splash_screen")
+                            .replace(R.id.app_container, SplashScreen.newInstance(false), SplashScreen.TAG)
                             .commit()
                     }
                 }
@@ -252,7 +266,7 @@ class MainActivity : BaseActivity() {
         if (isNewIntent.invert()) {
             supportFragmentManager.beginTransaction()
                 .setCustomAnimations(R.anim.enter_from_right, R.anim.exit_to_left, R.anim.enter_from_left, R.anim.exit_to_right)
-                .replace(R.id.app_container, Home.newInstance(), "home")
+                .replace(R.id.app_container, Home.newInstance(), Home.TAG)
                 .commit()
 
             supportFragmentManager.executePendingTransactions()
@@ -275,6 +289,7 @@ class MainActivity : BaseActivity() {
         }
     }
 
+    @Suppress("unused")
     private fun setExpiryStamp() {
         val expiryDate = Calendar.getInstance()
         val today = Calendar.getInstance()
@@ -295,7 +310,7 @@ class MainActivity : BaseActivity() {
         super.onConfigurationChanged(newConfig)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (AppearancePreferences.getTheme() == ThemeConstants.MATERIAL_YOU_DARK ||
-                AppearancePreferences.getTheme() == ThemeConstants.MATERIAL_YOU_LIGHT) {
+                    AppearancePreferences.getTheme() == ThemeConstants.MATERIAL_YOU_LIGHT) {
                 recreate()
             }
         }
@@ -312,14 +327,24 @@ class MainActivity : BaseActivity() {
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         super.onSharedPreferenceChanged(sharedPreferences, key)
         when (key) {
-            DevelopmentPreferences.crashHandler -> {
-                if (DevelopmentPreferences.get(DevelopmentPreferences.crashHandler).invert()) {
-                    CrashReporter(applicationContext).initialize()
+            DevelopmentPreferences.CRASH_HANDLER -> {
+                if (DevelopmentPreferences.get(DevelopmentPreferences.CRASH_HANDLER).invert()) {
+                    CrashReport(applicationContext).initialize()
                 }
             }
 
-            ConfigurationPreferences.language -> {
+            ConfigurationPreferences.LANGUAGE -> {
                 recreate() // update the language in context wrapper
+            }
+
+            TrialPreferences.HAS_LICENSE_KEY -> {
+                if (TrialPreferences.isFullVersion()) {
+                    if (TrialPreferences.isUnlockerVerificationRequired().invert()) {
+                        showWarning(R.string.full_version_activated, goBack = false)
+                    } else {
+                        showWarning(R.string.unlocker_not_installed, goBack = false)
+                    }
+                }
             }
         }
     }
@@ -363,13 +388,10 @@ class MainActivity : BaseActivity() {
                     supportFragmentManager.fragments.forEach {
                         if (it is Home) {
                             if (it.isVisible) {
-                                Log.d("Inure", "KEYCODE_A..KEYCODE_Z: Home")
                                 supportFragmentManager.beginTransaction()
-                                    .replace(R.id.app_container, Search.newInstance(firstLaunch = true), "search")
-                                    .addToBackStack("search")
+                                    .replace(R.id.app_container, Search.newInstance(firstLaunch = true), Search.TAG)
+                                    .addToBackStack(Search.TAG)
                                     .commit()
-                            } else {
-                                Log.d("Inure", "KEYCODE_A..KEYCODE_Z: Not Home")
                             }
                         }
                     }
@@ -380,10 +402,7 @@ class MainActivity : BaseActivity() {
                     supportFragmentManager.fragments.forEach {
                         if (it is Search) {
                             if (it.isVisible) {
-                                Log.d("Inure", "KEYCODE_ESCAPE: Search")
                                 supportFragmentManager.popBackStack()
-                            } else {
-                                Log.d("Inure", "KEYCODE_ESCAPE: Not Search")
                             }
                         }
                     }
@@ -402,9 +421,9 @@ class MainActivity : BaseActivity() {
 
         try {
             RootService.stop(Intent(this, RootService::class.java))
-            Logger.postVerboseLog("RootService stopped")
+            Log.d("RootService", "Stopped")
         } catch (e: IllegalStateException) {
-            Logger.postErrorLog(e.message ?: "RootService not running")
+            Log.d("RootService", "Not running")
         }
     }
 }

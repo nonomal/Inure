@@ -8,6 +8,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import app.simple.inure.R
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.extensions.viewmodels.UsageStatsViewModel
 import app.simple.inure.models.AppUsageModel
 import app.simple.inure.models.DataUsage
@@ -15,7 +16,7 @@ import app.simple.inure.models.PackageStats
 import app.simple.inure.preferences.StatisticsPreferences
 import app.simple.inure.util.ConditionUtils.isNotZero
 import app.simple.inure.util.FileSizeHelper.getDirectoryLength
-import app.simple.inure.util.LocaleHelper
+import app.simple.inure.util.LocaleUtils
 import app.simple.inure.util.UsageInterval
 import com.github.mikephil.charting.data.BarEntry
 import com.github.mikephil.charting.data.PieEntry
@@ -26,7 +27,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
-import java.util.*
 
 class AppStatisticsGraphViewModel(application: Application, private val packageInfo: PackageInfo) : UsageStatsViewModel(application) {
 
@@ -106,7 +106,7 @@ class AppStatisticsGraphViewModel(application: Application, private val packageI
                     } else if (event.eventType == UsageEvents.Event.ACTIVITY_PAUSED) {
                         endTime = eventTime
                         skipNew = false
-                        if (packageInfo.packageName.equals(event.packageName)) {
+                        if (packageInfo.packageName == event.packageName) {
                             val time = endTime - startTime + 1
                             packageStats.appUsage?.add(iteration, AppUsageModel(startTime, time, endTime))
                             packageStats.launchCount = iteration.plus(1)
@@ -165,7 +165,7 @@ class AppStatisticsGraphViewModel(application: Application, private val packageI
                     BarEntry(6f, 0f, getDayString(LocalDate.now().minusDays(6)))
             )
 
-            packageStats.appUsage?.forEach { it ->
+            packageStats.appUsage?.forEach {
                 val number = it.date.getNumberOfDaysBetweenTwoDates()
 
                 try {
@@ -263,17 +263,21 @@ class AppStatisticsGraphViewModel(application: Application, private val packageI
     //    }
 
     private fun getDayString(date: LocalDate): String? {
-        return date.dayOfWeek.getDisplayName(TextStyle.SHORT, LocaleHelper.getAppLocale())
+        return date.dayOfWeek.getDisplayName(TextStyle.SHORT, LocaleUtils.getAppLocale())
     }
 
     private fun Long.toLocalDate(): LocalDate {
-        return Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
+        return Instant.ofEpochMilli(this)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDate()
     }
 
     private fun Long.getNumberOfDaysBetweenTwoDates(): Int {
         return Instant.ofEpochMilli(this)
-            .atZone(ZoneId.systemDefault()).toLocalDate()
-            .until(LocalDate.now(), ChronoUnit.DAYS).toInt()
+            .atZone(ZoneId.systemDefault())
+            .toLocalDate()
+            .until(LocalDate.now(), ChronoUnit.DAYS)
+            .toInt()
     }
 
     @Suppress("unused")
@@ -284,7 +288,7 @@ class AppStatisticsGraphViewModel(application: Application, private val packageI
             var size = 0L
 
             for (i in apps.indices) {
-                size += apps[i].applicationInfo.sourceDir.getDirectoryLength()
+                size += apps[i].safeApplicationInfo.sourceDir.getDirectoryLength()
             }
         }
     }

@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import app.simple.inure.apk.utils.PackageUtils
 import app.simple.inure.apk.utils.ReceiversUtils
 import app.simple.inure.extensions.viewmodels.RootShizukuViewModel
+import app.simple.inure.helpers.ShizukuServiceHelper
 import app.simple.inure.models.ActivityInfoModel
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
@@ -57,11 +58,9 @@ class BootManagerViewModel(application: Application, private val packageInfo: Pa
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     packageManager.queryBroadcastReceivers(PackageUtils.getIntentFilter(bootCompletedIntent), PackageManager.ResolveInfoFlags.of(resolveInfoFlags.toLong()))
                 } else {
-                    @Suppress("DEPRECATION")
                     packageManager.queryBroadcastReceivers(PackageUtils.getIntentFilter(bootCompletedIntent), resolveInfoFlags)
                 }
             } else {
-                @Suppress("DEPRECATION")
                 packageManager.queryBroadcastReceivers(PackageUtils.getIntentFilter(bootCompletedIntent), resolveInfoFlags)
             }.filter { it.activityInfo.packageName.equals(packageInfo.packageName) }
 
@@ -92,7 +91,7 @@ class BootManagerViewModel(application: Application, private val packageInfo: Pa
 
     }
 
-    override fun onShizukuCreated() {
+    override fun onShizukuCreated(shizukuServiceHelper: ShizukuServiceHelper) {
 
     }
 

@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -62,7 +65,7 @@
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:enableOnBackInvokedCallback="true"
+        android:enableOnBackInvokedCallback="false"
         android:fullBackupContent="@xml/backup_rules"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
@@ -75,11 +78,23 @@
         android:supportsRtl="true"
         android:theme="@style/Inure"
         android:windowSoftInputMode="adjustPan"
-        tools:ignore="AllowBackup"
         android:taskAffinity="app.simple.inure"
+        tools:ignore="AllowBackup"
         tools:targetApi="tiramisu">
 
         <profileable android:shell="true" />
+
+        <meta-data
+            android:name="com.sec.android.support.multiwindow"
+            android:value="true" />
+
+        <meta-data
+            android:name="open_source"
+            android:value="true" />
+
+        <meta-data
+            android:name="open_source_license"
+            android:value="GNU GENERAL PUBLIC LICENSE Version 3" />
 
         <activity
             android:name=".activities.app.MainActivity"
@@ -139,7 +154,7 @@
         <activity
             android:name=".activities.preferences.PreferenceActivity"
             android:configChanges="uiMode"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/preferences"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -151,7 +166,7 @@
         <activity
             android:name=".activities.app.ManageSpace"
             android:configChanges="uiMode"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/manage_space"
             android:windowSoftInputMode="adjustResize" />
 
@@ -336,7 +351,7 @@
             android:exported="true"
             android:label="@string/installer"
             android:theme="@style/Inure.Transparent"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustNothing">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
 
@@ -435,6 +450,11 @@
                 <data android:host="*" />
                 <data android:mimeType="image/*" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
         </activity>
 
         <activity
@@ -521,6 +541,11 @@
                 <data android:host="*" />
                 <data android:mimeType="text/xml" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
         </activity>
 
         <activity
@@ -564,6 +589,11 @@
                 <data android:host="*" />
                 <data android:mimeType="font/ttf" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="font/ttf" />
+            </intent-filter>
         </activity>
 
         <activity-alias
@@ -584,7 +614,7 @@
 
         <activity-alias
             android:name="TermInternal"
-            android:exported="false"
+            android:exported="true"
             android:icon="@mipmap/ic_terminal"
             android:targetActivity=".terminal.Term">
             <intent-filter>
@@ -609,15 +639,21 @@
         </activity>
 
         <activity-alias
-            android:name="TermHere"
+            android:name=".activities.alias.TermHere"
+            android:enabled="true"
             android:exported="true"
             android:icon="@mipmap/ic_terminal"
             android:label="@string/activity_term_here_title"
             android:targetActivity=".terminal.RemoteInterface">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <data android:mimeType="*/*" />
+            <intent-filter tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="resource/folder" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="org.openintents.action.VIEW_DIRECTORY" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="file" />
             </intent-filter>
         </activity-alias>
 
@@ -709,6 +745,7 @@
             android:name=".terminal.TermService"
             android:enabled="true"
             android:exported="false"
+            android:foregroundServiceType="specialUse"
             android:icon="@mipmap/ic_terminal">
             <intent-filter>
                 <action android:name="inure.terminal.action.START_TERM.v1" />
@@ -733,12 +770,6 @@
             android:roundIcon="@mipmap/ic_audio_player_round" />
 
         <service
-            android:name=".services.BatchExtractService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <service
             android:name=".services.InstallerService"
             android:enabled="true"
             android:exported="false" />
@@ -757,6 +788,12 @@
             android:name=".services.DataLoaderService"
             android:enabled="true"
             android:exported="false" />
+
+        <service
+            android:name=".services.BatchExtractService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <receiver
             android:name="app.simple.inure.receivers.MediaButtonIntentReceiver"
@@ -815,6 +852,16 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".receivers.LicenceVerificationReceiver"
+            android:enabled="true"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="app.simple.inureunlocker.action.LICENCE_VERIFICATION_RESPONSE" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
@@ -832,10 +879,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
         </provider>
-
-        <meta-data
-            android:name="com.sec.android.support.multiwindow"
-            android:value="true" />
 
     </application>
 

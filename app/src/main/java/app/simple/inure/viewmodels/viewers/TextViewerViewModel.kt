@@ -6,14 +6,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import app.simple.inure.apk.xml.XML
+import app.simple.inure.apk.decoders.XMLDecoder
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.util.StringUtils.readTextSafely
 import app.simple.inure.util.XMLUtils.formatXML
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.BufferedInputStream
 import java.io.File
-import java.util.*
+import java.util.Enumeration
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
@@ -41,7 +42,7 @@ class TextViewerViewModel(private val packageInfo: PackageInfo, private val path
                         }
                     }
                 } else {
-                    ZipFile(packageInfo.applicationInfo.sourceDir).use { zipFile ->
+                    ZipFile(packageInfo.safeApplicationInfo.sourceDir).use { zipFile ->
                         val entries: Enumeration<out ZipEntry?> = zipFile.entries()
                         while (entries.hasMoreElements()) {
                             entries.nextElement()!!.let { entry ->
@@ -49,10 +50,8 @@ class TextViewerViewModel(private val packageInfo: PackageInfo, private val path
                                     if (entry.name == path) {
                                         when {
                                             path.endsWith("xml") -> {
-                                                text.postValue(
-                                                        XML(packageInfo.applicationInfo.sourceDir).use {
-                                                            it.transBinaryXml(path).formatXML()
-                                                        })
+                                                val xml = XMLDecoder(packageInfo.safeApplicationInfo.sourceDir).decode(path)
+                                                text.postValue(xml.formatXML())
                                             }
                                             else -> {
                                                 text.postValue(BufferedInputStream(zipFile.getInputStream(entry)).readTextSafely())

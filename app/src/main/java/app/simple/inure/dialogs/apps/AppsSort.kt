@@ -12,6 +12,7 @@ import app.simple.inure.extensions.fragments.ScopedBottomSheetFragment
 import app.simple.inure.preferences.AppsPreferences
 import app.simple.inure.util.FlagUtils
 import app.simple.inure.util.Sort
+import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.chip.ChipGroup
 
 class AppsSort : ScopedBottomSheetFragment() {
@@ -21,6 +22,7 @@ class AppsSort : ScopedBottomSheetFragment() {
     private lateinit var applicationTypeChipGroup: ChipGroup
     private lateinit var categoryChipGroup: ChipGroup
     private lateinit var filterChipGroup: ChipGroup
+    private lateinit var logicalOperatorGroup: MaterialButtonToggleGroup
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = inflater.inflate(R.layout.dialog_sort_apps, container, false)
@@ -30,6 +32,7 @@ class AppsSort : ScopedBottomSheetFragment() {
         filterChipGroup = view.findViewById(R.id.filter_chip_group)
         categoryChipGroup = view.findViewById(R.id.category_chip_group)
         applicationTypeChipGroup = view.findViewById(R.id.application_type_chip_group)
+        logicalOperatorGroup = view.findViewById(R.id.logical_operator_group)
 
         return view
     }
@@ -47,6 +50,7 @@ class AppsSort : ScopedBottomSheetFragment() {
 
         setAppsCategory()
         setAppsFilter()
+        setLogicalOperator()
 
         when (AppsPreferences.getSortStyle()) {
             Sort.NAME -> {
@@ -149,48 +153,6 @@ class AppsSort : ScopedBottomSheetFragment() {
             }
         }
 
-        filterChipGroup.setOnCheckedStateChangeListener { _, checkedIds ->
-            var sourceFlags = AppsPreferences.getAppsFilter()
-
-            sourceFlags = if (checkedIds.contains(R.id.disabled)) {
-                FlagUtils.setFlag(sourceFlags, SortConstant.DISABLED)
-            } else {
-                FlagUtils.unsetFlag(sourceFlags, SortConstant.DISABLED)
-            }
-
-            sourceFlags = if (checkedIds.contains(R.id.enabled)) {
-                FlagUtils.setFlag(sourceFlags, SortConstant.ENABLED)
-            } else {
-                FlagUtils.unsetFlag(sourceFlags, SortConstant.ENABLED)
-            }
-
-            sourceFlags = if (checkedIds.contains(R.id.apk)) {
-                FlagUtils.setFlag(sourceFlags, SortConstant.APK)
-            } else {
-                FlagUtils.unsetFlag(sourceFlags, SortConstant.APK)
-            }
-
-            sourceFlags = if (checkedIds.contains(R.id.split)) {
-                FlagUtils.setFlag(sourceFlags, SortConstant.SPLIT)
-            } else {
-                FlagUtils.unsetFlag(sourceFlags, SortConstant.SPLIT)
-            }
-
-            sourceFlags = if (checkedIds.contains(R.id.uninstalled)) {
-                FlagUtils.setFlag(sourceFlags, SortConstant.UNINSTALLED)
-            } else {
-                FlagUtils.unsetFlag(sourceFlags, SortConstant.UNINSTALLED)
-            }
-
-            sourceFlags = if (checkedIds.contains(R.id.combine_flags)) {
-                FlagUtils.setFlag(sourceFlags, SortConstant.COMBINE_FLAGS)
-            } else {
-                FlagUtils.unsetFlag(sourceFlags, SortConstant.COMBINE_FLAGS)
-            }
-
-            AppsPreferences.setAppsFilter(sourceFlags)
-        }
-
         categoryChipGroup.setOnCheckedStateChangeListener { _, checkedIds ->
             var categoryFlags = SortConstant.ALL_CATEGORIES
 
@@ -257,6 +219,82 @@ class AppsSort : ScopedBottomSheetFragment() {
             }
 
             AppsPreferences.setAppsCategory(categoryFlags)
+        }
+
+        filterChipGroup.setOnCheckedStateChangeListener { _, checkedIds ->
+            var sourceFlags = AppsPreferences.getAppsFilter()
+
+            sourceFlags = if (checkedIds.contains(R.id.disabled)) {
+                FlagUtils.setFlag(sourceFlags, SortConstant.DISABLED)
+            } else {
+                FlagUtils.unsetFlag(sourceFlags, SortConstant.DISABLED)
+            }
+
+            sourceFlags = if (checkedIds.contains(R.id.enabled)) {
+                FlagUtils.setFlag(sourceFlags, SortConstant.ENABLED)
+            } else {
+                FlagUtils.unsetFlag(sourceFlags, SortConstant.ENABLED)
+            }
+
+            sourceFlags = if (checkedIds.contains(R.id.apk)) {
+                FlagUtils.setFlag(sourceFlags, SortConstant.APK)
+            } else {
+                FlagUtils.unsetFlag(sourceFlags, SortConstant.APK)
+            }
+
+            sourceFlags = if (checkedIds.contains(R.id.split)) {
+                FlagUtils.setFlag(sourceFlags, SortConstant.SPLIT)
+            } else {
+                FlagUtils.unsetFlag(sourceFlags, SortConstant.SPLIT)
+            }
+
+            sourceFlags = if (checkedIds.contains(R.id.uninstalled)) {
+                FlagUtils.setFlag(sourceFlags, SortConstant.UNINSTALLED)
+            } else {
+                FlagUtils.unsetFlag(sourceFlags, SortConstant.UNINSTALLED)
+            }
+
+            sourceFlags = if (checkedIds.contains(R.id.foss)) {
+                FlagUtils.setFlag(sourceFlags, SortConstant.FOSS)
+            } else {
+                FlagUtils.unsetFlag(sourceFlags, SortConstant.FOSS)
+            }
+
+            sourceFlags = if (checkedIds.contains(R.id.large_heap)) {
+                FlagUtils.setFlag(sourceFlags, SortConstant.LARGE_HEAP)
+            } else {
+                FlagUtils.unsetFlag(sourceFlags, SortConstant.LARGE_HEAP)
+            }
+
+            sourceFlags = if (checkedIds.contains(R.id.launchable)) {
+                FlagUtils.setFlag(sourceFlags, SortConstant.LAUNCHABLE)
+            } else {
+                FlagUtils.unsetFlag(sourceFlags, SortConstant.LAUNCHABLE)
+            }
+
+            sourceFlags = if (checkedIds.contains(R.id.stopped)) {
+                FlagUtils.setFlag(sourceFlags, SortConstant.STOPPED)
+            } else {
+                FlagUtils.unsetFlag(sourceFlags, SortConstant.STOPPED)
+            }
+
+            AppsPreferences.setAppsFilter(sourceFlags)
+        }
+
+        logicalOperatorGroup.addOnButtonCheckedListener { group, _, _ ->
+            val checkedButtonIds = group.checkedButtonIds
+
+            when {
+                checkedButtonIds.contains(R.id.and) -> {
+                    AppsPreferences.setFilterStyle(SortConstant.FILTER_STYLE_AND)
+                }
+                checkedButtonIds.contains(R.id.or) -> {
+                    AppsPreferences.setFilterStyle(SortConstant.FILTER_STYLE_OR)
+                }
+                else -> {
+                    AppsPreferences.setFilterStyle(SortConstant.FILTER_STYLE_OR)
+                }
+            }
         }
     }
 
@@ -325,8 +363,28 @@ class AppsSort : ScopedBottomSheetFragment() {
             filterChipGroup.check(R.id.uninstalled)
         }
 
-        if (FlagUtils.isFlagSet(AppsPreferences.getAppsFilter(), SortConstant.COMBINE_FLAGS)) {
-            filterChipGroup.check(R.id.combine_flags)
+        if (FlagUtils.isFlagSet(AppsPreferences.getAppsFilter(), SortConstant.FOSS)) {
+            filterChipGroup.check(R.id.foss)
+        }
+
+        if (FlagUtils.isFlagSet(AppsPreferences.getAppsFilter(), SortConstant.LARGE_HEAP)) {
+            filterChipGroup.check(R.id.large_heap)
+        }
+
+        if (FlagUtils.isFlagSet(AppsPreferences.getAppsFilter(), SortConstant.LAUNCHABLE)) {
+            filterChipGroup.check(R.id.launchable)
+        }
+
+        if (FlagUtils.isFlagSet(AppsPreferences.getAppsFilter(), SortConstant.STOPPED)) {
+            filterChipGroup.check(R.id.stopped)
+        }
+    }
+
+    private fun setLogicalOperator() {
+        if (AppsPreferences.isFilterStyleAnd()) {
+            logicalOperatorGroup.check(R.id.and)
+        } else {
+            logicalOperatorGroup.check(R.id.or)
         }
     }
 

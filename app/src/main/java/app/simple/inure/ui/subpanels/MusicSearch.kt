@@ -14,6 +14,7 @@ import androidx.core.net.toUri
 import androidx.core.view.doOnPreDraw
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import app.simple.inure.R
 import app.simple.inure.adapters.music.AdapterMusic
@@ -27,9 +28,10 @@ import app.simple.inure.interfaces.fragments.SureCallbacks
 import app.simple.inure.interfaces.menus.PopupMusicMenuCallbacks
 import app.simple.inure.models.AudioModel
 import app.simple.inure.popups.music.PopupMusicMenu
+import app.simple.inure.preferences.DevelopmentPreferences
 import app.simple.inure.preferences.MusicPreferences
 import app.simple.inure.services.AudioServicePager
-import app.simple.inure.ui.viewers.AudioPlayerPager
+import app.simple.inure.ui.viewers.AudioPlayer
 import app.simple.inure.util.ConditionUtils.invert
 import app.simple.inure.util.StatusBarHeight
 import app.simple.inure.util.ViewUtils.gone
@@ -101,14 +103,14 @@ class MusicSearch : KeyboardScopedFragment() {
 
             adapterMusic?.setOnMusicCallbackListener(object : AdapterMusic.Companion.MusicCallbacks {
                 override fun onMusicClicked(audioModel: AudioModel, art: ImageView, position: Int) {
-                    openFragmentArc(AudioPlayerPager.newInstance(position, fromSearch = true), art, "audio_player_pager")
+                    openFragmentArc(AudioPlayer.newInstance(position, fromSearch = true), art, AudioPlayer.TAG)
                     requireArguments().putInt(BundleConstants.position, position)
                 }
 
                 override fun onMusicLongClicked(audioModel: AudioModel, view: ImageView, position: Int, container: View) {
                     PopupMusicMenu(requireView(), audioModel.fileUri.toUri()).setOnPopupMusicMenuCallbacks(object : PopupMusicMenuCallbacks {
                         override fun onPlay(uri: Uri) {
-                            openFragmentArc(AudioPlayerPager.newInstance(position, fromSearch = true), view, "audio_player_pager")
+                            openFragmentArc(AudioPlayer.newInstance(position, fromSearch = true), view, AudioPlayer.TAG)
                             MusicPreferences.setMusicPosition(position)
                             MusicPreferences.setLastMusicId(audioModel.id)
                         }
@@ -164,6 +166,12 @@ class MusicSearch : KeyboardScopedFragment() {
                 }
             })
 
+            if (DevelopmentPreferences.get(DevelopmentPreferences.USE_PERISTYLE_INTERFACE)) {
+                recyclerView.layoutManager = GridLayoutManager(requireContext(), 2)
+            } else {
+                recyclerView.layoutManager = LinearLayoutManager(requireContext())
+            }
+
             recyclerView.adapter = adapterMusic
 
             if (requireArguments().getInt(BundleConstants.position, MusicPreferences.getMusicPosition()) == MusicPreferences.getMusicPosition()) {
@@ -208,14 +216,14 @@ class MusicSearch : KeyboardScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            MusicPreferences.searchKeyword -> {
+            MusicPreferences.SEARCH_KEYWORD -> {
                 musicViewModel.loadSearched(MusicPreferences.getSearchKeyword())
             }
-            MusicPreferences.lastMusicId -> {
+            MusicPreferences.LAST_MUSIC_ID -> {
                 adapterMusic?.updateHighlightedSongState()
             }
-            MusicPreferences.musicSort,
-            MusicPreferences.musicSortReverse -> {
+            MusicPreferences.MUSIC_SORT,
+            MusicPreferences.MUSIC_SORT_REVERSE -> {
                 MusicPreferences.setMusicPosition(-1)
                 musicViewModel.sortSongs()
             }
@@ -237,5 +245,7 @@ class MusicSearch : KeyboardScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "MusicSearch"
     }
 }

@@ -1,5 +1,6 @@
 package app.simple.inure.ui.panels
 
+import android.annotation.SuppressLint
 import android.content.pm.PackageInfo
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -12,7 +13,7 @@ import app.simple.inure.R
 import app.simple.inure.adapters.home.AdapterFOSS
 import app.simple.inure.constants.BottomMenuConstants
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
-import app.simple.inure.dialogs.menus.AppsMenu
+import app.simple.inure.dialogs.app.AppMenu
 import app.simple.inure.extensions.fragments.ScopedFragment
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
 import app.simple.inure.viewmodels.panels.HomeViewModel
@@ -34,15 +35,25 @@ class FOSS : ScopedFragment() {
         return view
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        if (homeViewModel.shouldShowFOSSLoader()) {
+            showLoader(manualOverride = true)
+        }
 
         homeViewModel.getFossApps().observe(viewLifecycleOwner) {
             hideLoader()
             postponeEnterTransition()
 
             adapterFOSS?.apps = it
-            recyclerView.adapter = adapterFOSS
+
+            if (recyclerView.adapter == null) {
+                recyclerView.adapter = adapterFOSS
+            } else {
+                adapterFOSS?.notifyDataSetChanged()
+            }
 
             (view.parent as? ViewGroup)?.doOnPreDraw {
                 startPostponedEnterTransition()
@@ -54,18 +65,18 @@ class FOSS : ScopedFragment() {
                 }
 
                 override fun onAppLongPressed(packageInfo: PackageInfo, icon: ImageView) {
-                    AppsMenu.newInstance(packageInfo)
-                        .show(childFragmentManager, "apps_menu")
+                    AppMenu.newInstance(packageInfo)
+                        .show(childFragmentManager, AppMenu.TAG)
                 }
             })
 
             bottomRightCornerMenu?.initBottomMenuWithRecyclerView(BottomMenuConstants.getGenericBottomMenuItems(), recyclerView) { id, _ ->
                 when (id) {
                     R.drawable.ic_settings -> {
-                        openFragmentSlide(Preferences.newInstance(), "prefs_screen")
+                        openFragmentSlide(Preferences.newInstance(), Preferences.TAG)
                     }
                     R.drawable.ic_search -> {
-                        openFragmentSlide(Search.newInstance(true), "search")
+                        openFragmentSlide(Search.newInstance(true), Search.TAG)
                     }
                     R.drawable.ic_refresh -> {
                         showLoader(manualOverride = true)
@@ -83,5 +94,7 @@ class FOSS : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "FOSS"
     }
 }

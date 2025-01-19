@@ -1,22 +1,21 @@
 package app.simple.inure.ui.preferences.subscreens
 
 import android.content.SharedPreferences
-import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.SimpleItemAnimator
 import app.simple.inure.R
 import app.simple.inure.adapters.preferences.AdapterAccentColor
+import app.simple.inure.constants.Misc
 import app.simple.inure.decorations.overscroll.CustomVerticalRecyclerView
 import app.simple.inure.dialogs.appearance.ColorPicker.Companion.showColorPicker
 import app.simple.inure.extensions.fragments.ScopedFragment
 import app.simple.inure.preferences.AppearancePreferences
-import app.simple.inure.preferences.DevelopmentPreferences
 import app.simple.inure.themes.data.MaterialYou
 
 class AccentColor : ScopedFragment() {
@@ -24,12 +23,22 @@ class AccentColor : ScopedFragment() {
     private lateinit var recyclerView: CustomVerticalRecyclerView
     private lateinit var adapterAccentColor: AdapterAccentColor
 
+    private var spanCount = 2
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = layoutInflater.inflate(R.layout.fragment_accent_color, container, false)
 
+        spanCount = resources.getInteger(R.integer.colors_span_count)
+
         recyclerView = view.findViewById(R.id.accent_recycler_view)
-        recyclerView.layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.VERTICAL, false)
+        recyclerView.layoutManager = GridLayoutManager(requireContext(), spanCount)
         recyclerView.setHasFixedSize(true)
+
+        (recyclerView.layoutManager as GridLayoutManager).spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int): Int {
+                return if (adapterAccentColor.getItemViewType(position) == 0) spanCount else 1
+            }
+        }
 
         val list = arrayListOf(
                 Pair(ContextCompat.getColor(requireContext(), R.color.inure), "Inure"),
@@ -63,13 +72,12 @@ class AccentColor : ScopedFragment() {
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            list.add(MaterialYou.materialYouAdapterIndex,
-                     Pair(ContextCompat.getColor(requireContext(), MaterialYou.materialYouAccentResID), "Material You (Dynamic)"))
+            list.add(MaterialYou.MATERIAL_YOU_ADAPTER_INDEX,
+                     Pair(ContextCompat.getColor(requireContext(),
+                                                 MaterialYou.MATERIAL_YOU_ACCENT_RES_ID), "Material You (Dynamic)"))
         }
 
-        if (DevelopmentPreferences.get(DevelopmentPreferences.enableCustomColorPickerInAccent)) { // Add color picker
-            list.add(1, Pair(Color.DKGRAY /* Bogus Value */, "Color Picker"))
-        }
+        list.add(Misc.COLOR_PICKER_INDEX, Pair(AppearancePreferences.getPickedAccentColor(), getString(R.string.color_picker)))
 
         adapterAccentColor = AdapterAccentColor(list)
 
@@ -95,8 +103,8 @@ class AccentColor : ScopedFragment() {
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         super.onSharedPreferenceChanged(sharedPreferences, key)
         when (key) {
-            AppearancePreferences.accentColor, AppearancePreferences.isCustomColor -> {
-                adapterAccentColor.updateAccentColor()
+            AppearancePreferences.ACCENT_COLOR, AppearancePreferences.IS_CUSTOM_COLOR, AppearancePreferences.PICKED_ACCENT_COLOR -> {
+                adapterAccentColor.updateAccentColor(requireContext())
             }
         }
     }
@@ -108,5 +116,7 @@ class AccentColor : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "AccentColor"
     }
 }

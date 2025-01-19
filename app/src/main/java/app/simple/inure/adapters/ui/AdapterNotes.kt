@@ -11,7 +11,7 @@ import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import app.simple.inure.R
-import app.simple.inure.apk.parsers.FOSSParser
+import app.simple.inure.apk.utils.PackageUtils.safeApplicationInfo
 import app.simple.inure.decorations.overscroll.VerticalListViewHolder
 import app.simple.inure.decorations.ripple.DynamicRippleMaterialCardView
 import app.simple.inure.decorations.typeface.TypeFaceTextView
@@ -20,6 +20,7 @@ import app.simple.inure.glide.util.ImageLoader.loadAppIcon
 import app.simple.inure.interfaces.adapters.AdapterCallbacks
 import app.simple.inure.models.NotesPackageInfo
 import app.simple.inure.preferences.NotesPreferences
+import app.simple.inure.util.AdapterUtils.setAppVisualStates
 import app.simple.inure.util.DateUtils
 import app.simple.inure.util.RecyclerViewUtils
 
@@ -59,13 +60,12 @@ class AdapterNotes(var notes: ArrayList<NotesPackageInfo>) : RecyclerView.Adapte
             // holder.icon.transitionName = notes[position].packageInfo.packageName
 
             holder.icon.transitionName = notes[position].packageInfo.packageName
-            holder.icon.loadAppIcon(notes[position].packageInfo.packageName, notes[position].packageInfo.applicationInfo.enabled)
-            holder.name.text = notes[position].packageInfo.applicationInfo.name
+            holder.icon.loadAppIcon(notes[position].packageInfo.packageName, notes[position].packageInfo.safeApplicationInfo.enabled)
+            holder.name.text = notes[position].packageInfo.safeApplicationInfo.name
             holder.packageId.text = notes[position].packageInfo.packageName
             holder.note.text = notes[position].note.subSequence(0, notes[position].note.length.coerceAtMost(1000))
 
-            holder.name.setStrikeThru(notes[position].packageInfo.applicationInfo.enabled)
-            holder.name.setFOSSIcon(FOSSParser.isPackageFOSS(notes[position].packageInfo.packageName))
+            holder.name.setAppVisualStates(notes[position].packageInfo)
 
             if (areNotesExpanded) {
                 holder.note.maxLines = 60
@@ -75,7 +75,7 @@ class AdapterNotes(var notes: ArrayList<NotesPackageInfo>) : RecyclerView.Adapte
 
             holder.updated.text = holder.context.getString(R.string.edited_on, DateUtils.formatDate(notes[position].dateUpdated))
 
-            if (notes[position].packageInfo.applicationInfo.enabled) {
+            if (notes[position].packageInfo.safeApplicationInfo.enabled) {
                 holder.name.paintFlags = holder.name.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
             } else {
                 holder.name.paintFlags = holder.name.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
@@ -143,37 +143,10 @@ class AdapterNotes(var notes: ArrayList<NotesPackageInfo>) : RecyclerView.Adapte
 
     inner class Header(itemView: View) : VerticalListViewHolder(itemView) {
         val total: TypeFaceTextView = itemView.findViewById(R.id.adapter_total_apps)
-        private val listStyle: ImageView = itemView.findViewById(R.id.list_style)
 
         init {
             val params = itemView.layoutParams as StaggeredGridLayoutManager.LayoutParams
             params.isFullSpan = true
-
-            updateListStyle()
-
-            listStyle.setOnClickListener {
-                when (NotesPreferences.getListType()) {
-                    NotesPreferences.LIST_TYPE_STAGGERED -> {
-                        NotesPreferences.setListType(NotesPreferences.LIST_TYPE_LIST)
-                        updateListStyle()
-                    }
-                    NotesPreferences.LIST_TYPE_LIST -> {
-                        NotesPreferences.setListType(NotesPreferences.LIST_TYPE_STAGGERED)
-                        updateListStyle()
-                    }
-                }
-            }
-        }
-
-        private fun updateListStyle() {
-            when (NotesPreferences.getListType()) {
-                NotesPreferences.LIST_TYPE_STAGGERED -> {
-                    listStyle.setImageResource(R.drawable.ic_notes_staggered)
-                }
-                NotesPreferences.LIST_TYPE_LIST -> {
-                    listStyle.setImageResource(R.drawable.ic_notes_list)
-                }
-            }
         }
     }
 }

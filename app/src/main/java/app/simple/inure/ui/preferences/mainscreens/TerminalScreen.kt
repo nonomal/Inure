@@ -11,25 +11,29 @@ import app.simple.inure.R
 import app.simple.inure.activities.alias.TerminalAlias
 import app.simple.inure.decorations.ripple.DynamicRippleRelativeLayout
 import app.simple.inure.decorations.ripple.DynamicRippleTextView
-import app.simple.inure.decorations.switchview.SwitchView
+import app.simple.inure.decorations.toggles.Switch
 import app.simple.inure.extensions.fragments.ScopedFragment
 import app.simple.inure.popups.terminal.PopupInputMethod
 import app.simple.inure.preferences.TerminalPreferences
-import app.simple.inure.ui.preferences.subscreens.*
+import app.simple.inure.ui.preferences.subscreens.TerminalBackButtonAction
+import app.simple.inure.ui.preferences.subscreens.TerminalColor
+import app.simple.inure.ui.preferences.subscreens.TerminalControlKey
+import app.simple.inure.ui.preferences.subscreens.TerminalFnKey
+import app.simple.inure.ui.preferences.subscreens.TerminalFontSize
 
 class TerminalScreen : ScopedFragment() {
 
-    private lateinit var standaloneApp: SwitchView
+    private lateinit var standaloneApp: Switch
     private lateinit var fontSize: DynamicRippleRelativeLayout
     private lateinit var color: DynamicRippleRelativeLayout
-    private lateinit var cursorBlink: SwitchView
-    private lateinit var utf8: SwitchView
+    private lateinit var cursorBlink: Switch
+    private lateinit var utf8: Switch
     private lateinit var backButtonAction: DynamicRippleRelativeLayout
     private lateinit var controlKey: DynamicRippleRelativeLayout
     private lateinit var fnKey: DynamicRippleRelativeLayout
     private lateinit var inputMethod: DynamicRippleTextView
-    private lateinit var altKey: SwitchView
-    private lateinit var keyboardShortcut: SwitchView
+    private lateinit var altKey: Switch
+    private lateinit var keyboardShortcut: Switch
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = inflater.inflate(R.layout.preferences_terminal, container, false)
@@ -54,13 +58,13 @@ class TerminalScreen : ScopedFragment() {
         startPostponedEnterTransition()
         fullVersionCheck()
 
-        standaloneApp.setChecked(requireContext().packageManager
-                                     .getComponentEnabledSetting(ComponentName(requireContext(), TerminalAlias::class.java))
-                                         == PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
-        cursorBlink.setChecked(TerminalPreferences.getCursorBlinkState())
-        utf8.setChecked(TerminalPreferences.getUTF8State())
-        altKey.setChecked(TerminalPreferences.getAltKeyEscapeState())
-        keyboardShortcut.setChecked(TerminalPreferences.getKeyboardShortcutState())
+        standaloneApp.isChecked = (requireContext().packageManager
+            .getComponentEnabledSetting(ComponentName(requireContext(), TerminalAlias::class.java))
+                == PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
+        cursorBlink.isChecked = TerminalPreferences.getCursorBlinkState()
+        utf8.isChecked = TerminalPreferences.getUTF8State()
+        altKey.isChecked = TerminalPreferences.getAltKeyEscapeState()
+        keyboardShortcut.isChecked = TerminalPreferences.getKeyboardShortcutState()
 
         setInputMethodText()
 
@@ -77,11 +81,11 @@ class TerminalScreen : ScopedFragment() {
         }
 
         fontSize.setOnClickListener {
-            openFragmentSlide(TerminalFontSize.newInstance(), "font_size")
+            openFragmentSlide(TerminalFontSize.newInstance(), TerminalFontSize.TAG)
         }
 
         color.setOnClickListener {
-            openFragmentSlide(TerminalColor.newInstance(), "color")
+            openFragmentSlide(TerminalColor.newInstance(), TerminalColor.TAG)
         }
 
         cursorBlink.setOnSwitchCheckedChangeListener {
@@ -93,15 +97,15 @@ class TerminalScreen : ScopedFragment() {
         }
 
         backButtonAction.setOnClickListener {
-            openFragmentSlide(TerminalBackButtonAction.newInstance(), "back_button")
+            openFragmentSlide(TerminalBackButtonAction.newInstance(), TerminalBackButtonAction.TAG)
         }
 
         controlKey.setOnClickListener {
-            openFragmentSlide(TerminalControlKey.newInstance(), "control_key")
+            openFragmentSlide(TerminalControlKey.newInstance(), TerminalControlKey.TAG)
         }
 
         fnKey.setOnClickListener {
-            openFragmentSlide(TerminalFnKey.newInstance(), "fn_key")
+            openFragmentSlide(TerminalFnKey.newInstance(), TerminalFnKey.TAG)
         }
 
         inputMethod.setOnClickListener {
@@ -127,7 +131,7 @@ class TerminalScreen : ScopedFragment() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            TerminalPreferences.inputMethod -> {
+            TerminalPreferences.INPUT_METHOD -> {
                 setInputMethodText()
             }
         }
@@ -140,5 +144,7 @@ class TerminalScreen : ScopedFragment() {
             fragment.arguments = args
             return fragment
         }
+
+        const val TAG = "terminal_screen"
     }
 }
